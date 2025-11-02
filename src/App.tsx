@@ -951,9 +951,6 @@ if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && select
 
   /** Checkbox/Linien-Dash im Kontextmenü gebraucht */
   const selectedEdgesArray = edges.filter(e => selectedEdgeIds.has(e.id));
-  const allSelectedDashed =
-    selectedEdgesArray.length > 0 && selectedEdgesArray.every(e => !!e.dashed);
-
   const palette: { name: string; color: string }[] = [
     { name: "Neon Grün",  color: "#39FF14" },
     { name: "Neon Gelb",  color: "#FFFF33" },
