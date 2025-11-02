@@ -37,7 +37,7 @@ type Snapshot = {
 };
 
 /** --- Konstanten --- */
-const STORAGE_KEY = "mindmap_v14"; // neue Version
+const STORAGE_KEY = "mindmap_v14";
 const BASE_W = 120;
 const BASE_H = 64;
 const DRAG_THRESHOLD = 16;
@@ -131,7 +131,7 @@ export default function App() {
     {
       id: 1,
       label: "Type to change Text",
-      x: 0, // Weltursprung
+      x: 0,
       y: 0,
       w: BASE_W,
       h: BASE_H,
@@ -154,11 +154,9 @@ export default function App() {
   const [scale, setScale] = useState(1);
 
   /** Refs */
-  // Merkt sich den aktuellen Pfad und die Position darin für Shift+Tab
-// Pfad-Navigation für Shift+Tab
-const shiftTabPathRef = useRef<number[] | null>(null); // [root, ..., leaf]
-const shiftTabIndexRef = useRef<number>(0);            // aktueller Index im Pfad
-
+  // Pfad-Navigation für Shift+Tab
+  const shiftTabPathRef = useRef<number[] | null>(null); // [root, ..., leaf]
+  const shiftTabIndexRef = useRef<number>(0);            // aktueller Index im Pfad
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const draggingNodeId = useRef<number | null>(null);
@@ -273,16 +271,15 @@ const shiftTabIndexRef = useRef<number>(0);            // aktueller Index im Pfa
     return { cx, cy, d };
   }
   function selectOnly(id: number) {
-  // Shift+Tab-Pfad zurücksetzen, wenn Auswahl manuell/anders wechselt
-  shiftTabPathRef.current = null;
-  shiftTabIndexRef.current = 0;
+    // Shift+Tab-Pfad zurücksetzen, wenn Auswahl wechselt
+    shiftTabPathRef.current = null;
+    shiftTabIndexRef.current = 0;
 
-  setSelectedId(id);
-  setSelectedIds(new Set([id]));
-  setSelectedEdgeIds(new Set());
-  freshTyping.current = true;
-}
-
+    setSelectedId(id);
+    setSelectedIds(new Set([id]));
+    setSelectedEdgeIds(new Set());
+    freshTyping.current = true;
+  }
   function clearSelection() {
     setSelectedId(null);
     setSelectedIds(new Set());
@@ -326,52 +323,36 @@ const shiftTabIndexRef = useRef<number>(0);            // aktueller Index im Pfa
   function getChildrenOf(parentId: number): number[] {
     return edges.filter(e => e.source === parentId).map(e => e.target).sort((a,b)=>a-b);
   }
-  // Pfad von Root → current (z. B. [root, ..., current])
-// Pfad von Root → current (z. B. [root, ..., current])
-function buildRootPath(startId: number): number[] {
-  const up: number[] = [];
-  let cur: number | null = startId;
-  while (cur != null) {
-    up.push(cur);
-    cur = getParentId(cur);
+  function buildRootPath(startId: number): number[] {
+    const up: number[] = [];
+    let cur: number | null = startId;
+    while (cur != null) {
+      up.push(cur);
+      cur = getParentId(cur);
+    }
+    return up.reverse();
   }
-  return up.reverse();
-}
-
-
-  // Winkel normalisieren in [0, 2π)
-function normAng(rad: number) {
-  const twoPi = Math.PI * 2;
-  let a = rad % twoPi;
-  if (a < 0) a += twoPi;
-  return a;
-}
-
-// Geschwister des aktuellen Knotens im Uhrzeigersinn (um den Parent) sortiert
-function getSiblingsClockwise(currentId: number): number[] {
-  const parentId = getParentId(currentId);
-  if (parentId == null) return []; // kein Parent → keine Geschwister
-
-  const parent = nodes.find(n => n.id === parentId);
-  if (!parent) return [];
-
-  const siblings = getChildrenOf(parentId); // inkl. currentId
-
-  const withAngle = siblings.map(id => {
-    const c = nodes.find(n => n.id === id)!;
-    // Winkel relativ zum Parent
-    const theta = Math.atan2(c.y - parent.y, c.x - parent.x);
-    return { id, a: normAng(theta) };
-  });
-
-  // Uhrzeigersinn: in SVG ist Y nach unten → praktikabel: Winkel absteigend sortieren
-  withAngle.sort((p, q) => q.a - p.a);
-
-  return withAngle.map(x => x.id);
-}
-
-
-
+  function normAng(rad: number) {
+    const twoPi = Math.PI * 2;
+    let a = rad % twoPi;
+    if (a < 0) a += twoPi;
+    return a;
+  }
+  function getSiblingsClockwise(currentId: number): number[] {
+    const parentId = getParentId(currentId);
+    if (parentId == null) return [];
+    const parent = nodes.find(n => n.id === parentId);
+    if (!parent) return [];
+    const siblings = getChildrenOf(parentId);
+    const withAngle = siblings.map(id => {
+      const c = nodes.find(n => n.id === id)!;
+      const theta = Math.atan2(c.y - parent.y, c.x - parent.x);
+      return { id, a: normAng(theta) };
+    });
+    // Uhrzeigersinn: absteigend (Canvas-Y wächst nach unten)
+    withAngle.sort((p, q) => q.a - p.a);
+    return withAngle.map(x => x.id);
+  }
   function resizeNodeForLabel(n: MindNode): MindNode {
     const baseFont = clamp(Math.round(n.h * 0.35), 12, 20);
     const L = layoutLabel(n.label, baseFont, BASE_W);
@@ -426,7 +407,7 @@ function getSiblingsClockwise(currentId: number): number[] {
     restore(s);
   }
 
-  /** Knoten hinzufügen – unterstützt optionale Koordinaten (für Kontextmenü) */
+  /** Knoten hinzufügen */
   function addStandalone(): number;
   function addStandalone(at: { x: number; y: number }): number;
   function addStandalone(at?: { x: number; y: number }): number {
@@ -506,7 +487,7 @@ function getSiblingsClockwise(currentId: number): number[] {
     return addStandalone();
   }
 
-  /** Entfernen – wählt Parent automatisch */
+  /** Entfernen */
   function removeEdges(ids: number[]) {
     if (!ids.length) return;
     pushHistory();
@@ -733,7 +714,7 @@ function getSiblingsClockwise(currentId: number): number[] {
         return;
       }
 
-      // Pfeile: Nachbar
+      // Pfeile: Nachbarwahl
       if ((e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") && selectedId != null) {
         e.preventDefault();
         const dir = e.key === "ArrowUp" ? {x:0,y:-1} : e.key === "ArrowDown" ? {x:0,y:1} : e.key === "ArrowLeft" ? {x:-1,y:0} : {x:1,y:0};
@@ -753,7 +734,7 @@ function getSiblingsClockwise(currentId: number): number[] {
         return;
       }
 
-      // Enter: Child / Shift+Enter: Sibling (ohne doppeltes bringBoxIntoView)
+      // Enter: Child / Shift+Enter: Sibling
       if (e.key === "Enter" && selectedId != null && selectedIds.size === 1 && !e.shiftKey) {
         e.preventDefault();
         const newId = addChild(selectedId);
@@ -797,75 +778,65 @@ function getSiblingsClockwise(currentId: number): number[] {
         return;
       }
 
-      // Shift+Tab: zum nächst höheren Knoten (Parent) springen
-// Shift+Tab: nach oben (Parent). Wenn am Root angekommen, denselben Pfad wieder nach unten gehen.
-// Shift+Tab: nach oben. Wenn oben (Root) angekommen, denselben Pfad wieder nach unten laufen – bis Leaf, dann stoppen.
-if (e.key === "Tab" && e.shiftKey && selectedId != null && selectedIds.size === 1) {
-  e.preventDefault();
+      // Shift+Tab: nach oben (Parent). Am Root angekommen → wieder nach unten laufen.
+      if (e.key === "Tab" && e.shiftKey && selectedId != null && selectedIds.size === 1) {
+        e.preventDefault();
 
-  // Pfad initialisieren oder neu aufbauen, wenn Selection nicht im aktuellen Pfad ist
-  if (
-    !shiftTabPathRef.current ||
-    shiftTabPathRef.current.indexOf(selectedId) === -1
-  ) {
-    const path = buildRootPath(selectedId);          // [root, ..., current]
-    shiftTabPathRef.current = path;
-    shiftTabIndexRef.current = path.length - 1;      // current-Position
-  }
+        if (
+          !shiftTabPathRef.current ||
+          shiftTabPathRef.current.indexOf(selectedId) === -1
+        ) {
+          const path = buildRootPath(selectedId);
+          shiftTabPathRef.current = path;
+          shiftTabIndexRef.current = path.length - 1;
+        }
 
-  const path = shiftTabPathRef.current!;
-  let idx = shiftTabIndexRef.current;
+        const path = shiftTabPathRef.current!;
+        let idx = shiftTabIndexRef.current;
 
-  if (idx > 0) {
-    // noch nicht am Root → einen Schritt nach oben
-    idx = idx - 1;
-  } else {
-    // bereits am Root → jetzt wieder nach unten laufen, bis Leaf
-    if (idx < path.length - 1) {
-      idx = idx + 1;
-    } else {
-      // schon am Leaf: nichts mehr tun
-      return;
-    }
-  }
+        if (idx > 0) {
+          idx = idx - 1;
+        } else {
+          if (idx < path.length - 1) {
+            idx = idx + 1;
+          } else {
+            return;
+          }
+        }
 
-  shiftTabIndexRef.current = idx;
-  const nextId = path[idx];
-  selectOnly(nextId);
-  const n = nodes.find(x => x.id === nextId);
-  if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
-  return;
-}
+        shiftTabIndexRef.current = idx;
+        const nextId = path[idx];
+        selectOnly(nextId);
+        const n = nodes.find(x => x.id === nextId);
+        if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
+        return;
+      }
 
+      // Tab: Geschwister im Uhrzeigersinn
+      if (e.key === 'Tab' && !e.shiftKey && selectedId != null && selectedIds.size === 1) {
+        e.preventDefault();
+        const order = getSiblingsClockwise(selectedId);
+        if (order.length <= 1) return;
+        const idx = order.indexOf(selectedId);
+        const nextId = order[(idx + 1) % order.length];
+        selectOnly(nextId);
+        const n = nodes.find(x => x.id === nextId);
+        if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
+        return;
+      }
 
-
-// Normales Tab: alle Knoten spiralförmig durchgehen (wrap-around)
-// Normales Tab: alle Geschwister im Uhrzeigersinn durchgehen (Wrap-around)
-if (e.key === 'Tab' && !e.shiftKey && selectedId != null && selectedIds.size === 1) {
-  e.preventDefault();
-  const order = getSiblingsClockwise(selectedId);
-  if (order.length <= 1) return; // kein oder nur ein Geschwister → nichts zu tun
-  const idx = order.indexOf(selectedId);
-  const nextId = order[(idx + 1) % order.length];
-  selectOnly(nextId);
-  const n = nodes.find(x => x.id === nextId);
-  if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
-  return;
-}
-// Option+Tab (Alt+Tab): in ersten Unterknoten springen (falls vorhanden)
-if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && selectedIds.size === 1) {
-  e.preventDefault();
-  const kids = getChildrenOf(selectedId);
-  if (kids.length > 0) {
-    const nextId = kids[0]; // nimm den ersten Unterknoten
-    selectOnly(nextId);
-    const n = nodes.find(x => x.id === nextId);
-    if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
-  }
-  return;
-}
-
-
+      // Alt/Meta + Tab: in ersten Unterknoten springen
+      if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && selectedIds.size === 1) {
+        e.preventDefault();
+        const kids = getChildrenOf(selectedId);
+        if (kids.length > 0) {
+          const nextId = kids[0];
+          selectOnly(nextId);
+          const n = nodes.find(x => x.id === nextId);
+          if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
+        }
+        return;
+      }
 
       // Tippen: Text in Knoten/Kante
       if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -887,7 +858,7 @@ if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && select
         if (selectedIds.size >= 1) {
           pushHistory();
           const ids = Array.from(selectedIds);
-          let replaceAll = freshTyping.current;
+          const replaceAll = freshTyping.current;
           setNodes(prev => prev.map(n => {
             if (!ids.includes(n.id)) return n;
             const nextText = replaceAll ? char : (n.label + char);
@@ -947,28 +918,6 @@ if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && select
     }
 
     setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
-  }
-
-  /** Checkbox/Linien-Dash im Kontextmenü gebraucht */
-  const selectedEdgesArray = edges.filter(e => selectedEdgeIds.has(e.id));
-  const palette: { name: string; color: string }[] = [
-    { name: "Neon Grün",  color: "#39FF14" },
-    { name: "Neon Gelb",  color: "#FFFF33" },
-    { name: "Neon Rot",   color: "#FF073A" },
-    { name: "Schwarz",    color: "#000000" },
-  ];
-  function applyFillToSelection(hex: string) {
-    const ids = Array.from(selectedIds);
-    if (!ids.length) return;
-    pushHistory();
-    const rgba = hexToRgba60(hex);
-    setNodes(prev => prev.map(n => ids.includes(n.id) ? { ...n, fillColor: rgba } : n));
-  }
-  function clearFillOfSelection() {
-    const ids = Array.from(selectedIds);
-    if (!ids.length) return;
-    pushHistory();
-    setNodes(prev => prev.map(n => ids.includes(n.id) ? { ...n, fillColor: undefined } : n));
   }
 
   /** --- Render --- */
@@ -1202,12 +1151,24 @@ if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && select
                   Füllfarbe (Auswahl)
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {palette.map((p) => (
+                  {[
+                    { name: "Neon Grün",  color: "#39FF14" },
+                    { name: "Neon Gelb",  color: "#FFFF33" },
+                    { name: "Neon Rot",   color: "#FF073A" },
+                    { name: "Schwarz",    color: "#000000" },
+                  ].map((p) => (
                     <button
                       key={`bg-${p.color}`}
                       title={selectedIds.size ? p.name : 'Kein Knoten ausgewählt'}
                       disabled={selectedIds.size === 0}
-                      onClick={() => { applyFillToSelection(p.color); setContextMenu({ ...contextMenu, open: false }); }}
+                      onClick={() => {
+                        const ids = Array.from(selectedIds);
+                        if (!ids.length) return;
+                        const rgba = hexToRgba60(p.color);
+                        pushHistory();
+                        setNodes(prev => prev.map(n => ids.includes(n.id) ? { ...n, fillColor: rgba } : n));
+                        setContextMenu({ ...contextMenu, open: false });
+                      }}
                       style={{
                         width: 24, height: 24, borderRadius: 6, border: '1px solid #555', background: '#fff', padding: 0,
                         cursor: selectedIds.size ? 'pointer' : 'not-allowed',
@@ -1220,7 +1181,13 @@ if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && select
                   ))}
                   <button
                     disabled={selectedIds.size === 0}
-                    onClick={() => { clearFillOfSelection(); setContextMenu({ ...contextMenu, open: false }); }}
+                    onClick={() => {
+                      const ids = Array.from(selectedIds);
+                      if (!ids.length) return;
+                      pushHistory();
+                      setNodes(prev => prev.map(n => ids.includes(n.id) ? { ...n, fillColor: undefined } : n));
+                      setContextMenu({ ...contextMenu, open: false });
+                    }}
                     style={{ background:'#eee', color:'#333', border:'none', padding:'6px 10px', borderRadius:10, cursor: selectedIds.size ? 'pointer' : 'not-allowed' }}
                   >
                     🧽 Farbe weg
@@ -1253,7 +1220,12 @@ if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && select
               <div style={{ padding:'6px 10px' }}>
                 <div style={{ fontSize:12, opacity:.7, marginBottom:6 }}>Füllfarbe</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
-                  {palette.map(p => (
+                  {[
+                    { name: "Neon Grün",  color: "#39FF14" },
+                    { name: "Neon Gelb",  color: "#FFFF33" },
+                    { name: "Neon Rot",   color: "#FF073A" },
+                    { name: "Schwarz",    color: "#000000" },
+                  ].map(p => (
                     <button
                       key={p.color}
                       title={p.name}
@@ -1287,7 +1259,12 @@ if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && select
               <div style={{ padding:'6px 10px' }}>
                 <div style={{ fontSize:12, opacity:.7, margin:'6px 0' }}>Rahmenfarbe</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
-                  {palette.map(p => (
+                  {[
+                    { name: "Neon Grün",  color: "#39FF14" },
+                    { name: "Neon Gelb",  color: "#FFFF33" },
+                    { name: "Neon Rot",   color: "#FF073A" },
+                    { name: "Schwarz",    color: "#000000" },
+                  ].map(p => (
                     <button
                       key={`border-${p.color}`}
                       title={p.name}
