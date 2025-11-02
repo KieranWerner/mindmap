@@ -192,7 +192,7 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<{
     open: boolean;
     x: number; y: number; // Bildschirmposition
-    wx?: number; wy?: number; // Weltposition für „Neuer Knoten“
+    wx?: number; wy?: number; // Weltposition für „new knot“
     kind: 'bg' | 'node' | 'edge';
     targetNodeId?: number;
     targetEdgeId?: number;
@@ -1148,7 +1148,7 @@ export default function App() {
               <div style={{ height: 1, background: 'rgba(0,0,0,.08)', margin: '6px 0' }} />
               <div style={{ padding: '6px 10px' }}>
                 <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
-                  Füllfarbe (Auswahl)
+                  colour
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                   {[
@@ -1190,14 +1190,14 @@ export default function App() {
                     }}
                     style={{ background:'#eee', color:'#333', border:'none', padding:'6px 10px', borderRadius:10, cursor: selectedIds.size ? 'pointer' : 'not-allowed' }}
                   >
-                    🧽 Farbe weg
+                    🧽 eraser
                   </button>
                 </div>
               </div>
 
               <div style={{ height: 1, background: 'rgba(0,0,0,.08)', margin: '6px 0' }} />
               <MenuItem
-                label="🗑️ Löschen (Auswahl)"
+                label="🗑️ delete"
                 onClick={() => {
                   if (selectedIds.size > 0) removeNodes(Array.from(selectedIds));
                   else if (selectedEdgeIds.size > 0) removeEdges(Array.from(selectedEdgeIds));
