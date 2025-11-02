@@ -371,23 +371,6 @@ function getSiblingsClockwise(currentId: number): number[] {
 }
 
 
-// Spiral-Reihenfolge: erst Radius (vom Schwerpunkt), dann Winkel
-function getSpiralOrderIds(ns: MindNode[]): number[] {
-  if (!ns.length) return [];
-  const cx = ns.reduce((s, n) => s + n.x, 0) / ns.length;
-  const cy = ns.reduce((s, n) => s + n.y, 0) / ns.length;
-
-  const withPolar = ns.map(n => {
-    const dx = n.x - cx;
-    const dy = n.y - cy;
-    const r = Math.hypot(dx, dy);
-    const theta = Math.atan2(dy, dx);
-    return { id: n.id, r, a: normAng(theta) };
-  });
-
-  withPolar.sort((p, q) => (p.r - q.r) || (p.a - q.a));
-  return withPolar.map(p => p.id);
-}
 
   function resizeNodeForLabel(n: MindNode): MindNode {
     const baseFont = clamp(Math.round(n.h * 0.35), 12, 20);
@@ -970,12 +953,6 @@ if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && select
   const selectedEdgesArray = edges.filter(e => selectedEdgeIds.has(e.id));
   const allSelectedDashed =
     selectedEdgesArray.length > 0 && selectedEdgesArray.every(e => !!e.dashed);
-  const toggleDashedForSelection = () => {
-    if (!selectedEdgeIds.size) return;
-    pushHistory();
-    const newValue = !allSelectedDashed;
-    setEdges(prev => prev.map(ed => selectedEdgeIds.has(ed.id) ? { ...ed, dashed: newValue } : ed));
-  };
 
   const palette: { name: string; color: string }[] = [
     { name: "Neon Grün",  color: "#39FF14" },
