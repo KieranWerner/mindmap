@@ -158,6 +158,9 @@ export default function App() {
   const shiftTabPathRef = useRef<number[] | null>(null); // [root, ..., leaf]
   const shiftTabIndexRef = useRef<number>(0);            // aktueller Index im Pfad
 
+  // zuletzt ausgewählter Knoten für Tab-Toggle
+  const prevSelectedIdRef = useRef<number | null>(null);
+
   const svgRef = useRef<SVGSVGElement | null>(null);
   const draggingNodeId = useRef<number | null>(null);
   const dragOffset = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
@@ -197,6 +200,9 @@ export default function App() {
     targetNodeId?: number;
     targetEdgeId?: number;
   }>({ open:false, x:0, y:0, kind:'bg' });
+
+  // File-Input-Ref für Load-Dialog
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   /** Persistenz */
   useEffect(() => {
@@ -274,6 +280,11 @@ export default function App() {
     // Shift+Tab-Pfad zurücksetzen, wenn Auswahl wechselt
     shiftTabPathRef.current = null;
     shiftTabIndexRef.current = 0;
+
+    // vorher markierten Knoten merken, wenn tatsächlich gewechselt wird
+    if (selectedId != null && selectedId !== id) {
+      prevSelectedIdRef.current = selectedId;
+    }
 
     setSelectedId(id);
     setSelectedIds(new Set([id]));
@@ -405,6 +416,75 @@ export default function App() {
     if (!s) return;
     undoStack.current.push(cloneSnapshot(snapshot()));
     restore(s);
+  }
+
+  /** --- Datei Export/Import --- */
+  function exportToFile() {
+    if (typeof window === "undefined") return;
+
+    const data: Snapshot = snapshot();
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    a.href = url;
+    a.download = `mindmap-${ts}.json`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function importFromText(text: string) {
+    try {
+      const raw = JSON.parse(text);
+
+      if (!raw || !Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) {
+        alert("Datei scheint keine gültige Mindmap zu sein.");
+        return;
+      }
+
+      if (
+        raw.pan &&
+        typeof raw.pan.x === "number" &&
+        typeof raw.pan.y === "number" &&
+        typeof raw.scale === "number"
+      ) {
+        const snap: Snapshot = {
+          nodes: raw.nodes,
+          edges: raw.edges,
+          pan: raw.pan,
+          scale: raw.scale,
+          selectedId: raw.selectedId ?? null,
+          selectedIds: raw.selectedIds ?? [],
+          selectedEdgeIds: raw.selectedEdgeIds ?? [],
+        };
+        restore(snap);
+      } else {
+        setNodes(raw.nodes as MindNode[]);
+        setEdges(raw.edges as Link[]);
+        setPan({ x: 0, y: 0 });
+        setScale(1);
+        clearSelection();
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Konnte die Datei nicht lesen (kein gültiges JSON).");
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = String(ev.target?.result || "");
+      importFromText(text);
+      e.target.value = "";
+    };
+    reader.readAsText(file, "utf-8");
   }
 
   /** Knoten hinzufügen */
@@ -714,23 +794,93 @@ export default function App() {
         return;
       }
 
-      // Pfeile: Nachbarwahl
-      if ((e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") && selectedId != null) {
+      // Pfeile: Nachbarwahl (intuitiver)
+      if (
+        (e.key === "ArrowUp" ||
+          e.key === "ArrowDown" ||
+          e.key === "ArrowLeft" ||
+          e.key === "ArrowRight") &&
+        selectedId != null
+      ) {
         e.preventDefault();
-        const dir = e.key === "ArrowUp" ? {x:0,y:-1} : e.key === "ArrowDown" ? {x:0,y:1} : e.key === "ArrowLeft" ? {x:-1,y:0} : {x:1,y:0};
-        const cur = nodes.find(n => n.id === selectedId); if (!cur) return;
-        let best: { id: number; score: number; dist: number } | null = null;
-        const len = Math.hypot(dir.x, dir.y) || 1; const ux = dir.x/len, uy = dir.y/len;
+
+        const dir =
+          e.key === "ArrowUp"
+            ? { x: 0, y: -1 }
+            : e.key === "ArrowDown"
+            ? { x: 0, y: 1 }
+            : e.key === "ArrowLeft"
+            ? { x: -1, y: 0 }
+            : { x: 1, y: 0 };
+
+        const cur = nodes.find((n) => n.id === selectedId);
+        if (!cur) return;
+
+        const len = Math.hypot(dir.x, dir.y) || 1;
+        const ux = dir.x / len;
+        const uy = dir.y / len;
+
+        type Cand = {
+          id: number;
+          dist: number;
+          angle: number;
+        };
+
+        const candidates: Cand[] = [];
+
         for (const n of nodes) {
           if (n.id === selectedId) continue;
-          const vx = n.x - cur.x; const vy = n.y - cur.y;
-          const dist = Math.hypot(vx, vy); if (dist === 0) continue;
-          const dot = vx*ux + vy*uy; if (dot <= 0) continue;
+
+          const vx = n.x - cur.x;
+          const vy = n.y - cur.y;
+          const dist = Math.hypot(vx, vy);
+          if (dist === 0) continue;
+
+          const dot = vx * ux + vy * uy;
+          if (dot <= 0) continue;
+
           const cos = dot / dist;
-          const score = cos + 0.0001/dist;
-          if (!best || score > best.score) best = { id: n.id, score, dist };
+          const angle = Math.acos(Math.max(-1, Math.min(1, cos)));
+
+          candidates.push({ id: n.id, dist, angle });
         }
-        if (best) { selectOnly(best.id); const n = nodes.find(x => x.id === best!.id)!; bringBoxIntoView(n.x, n.y, n.w, n.h); }
+
+        if (!candidates.length) return;
+
+        const DEG = Math.PI / 180;
+
+        function pickWithin(maxAngleRad: number): Cand | null {
+          let best: Cand | null = null;
+          for (const c of candidates) {
+            if (c.angle > maxAngleRad) continue;
+            if (!best) {
+              best = c;
+              continue;
+            }
+            if (
+              c.dist < best.dist - 1e-3 ||
+              (Math.abs(c.dist - best.dist) <= 1e-3 && c.angle < best.angle)
+            ) {
+              best = c;
+            }
+          }
+          return best;
+        }
+
+        let best = pickWithin(30 * DEG);
+        if (!best) best = pickWithin(60 * DEG);
+        if (!best) {
+          best = candidates.reduce((acc, c) =>
+            c.angle < acc.angle ? c : acc
+          );
+        }
+
+        if (best) {
+          selectOnly(best.id);
+          const n = nodes.find((x) => x.id === best!.id);
+          if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
+        }
+
         return;
       }
 
@@ -753,8 +903,8 @@ export default function App() {
       // Escape: Auswahl löschen
       if (e.key === "Escape") { clearSelection(); return; }
 
-      // Shift+Backspace: löschen (Knoten bevorzugt, sonst Kanten)
-      if (e.key === "Backspace" && e.shiftKey) {
+      // Shift+Backspace oder Delete: löschen (Knoten bevorzugt, sonst Kanten)
+      if ((e.key === "Backspace" && e.shiftKey) || e.key === "Delete") {
         e.preventDefault();
         if (hasNodeSel) removeNodes(Array.from(selectedIds));
         else if (hasEdgeSel) removeEdges(Array.from(selectedEdgeIds));
@@ -812,29 +962,17 @@ export default function App() {
         return;
       }
 
-      // Tab: Geschwister im Uhrzeigersinn
-      if (e.key === 'Tab' && !e.shiftKey && selectedId != null && selectedIds.size === 1) {
+      // Tab: zum vorher markierten Knoten springen (Toggle zwischen zwei Knoten)
+      if (e.key === "Tab" && !e.shiftKey && selectedId != null && selectedIds.size === 1) {
         e.preventDefault();
-        const order = getSiblingsClockwise(selectedId);
-        if (order.length <= 1) return;
-        const idx = order.indexOf(selectedId);
-        const nextId = order[(idx + 1) % order.length];
-        selectOnly(nextId);
-        const n = nodes.find(x => x.id === nextId);
-        if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
-        return;
-      }
+        const prevId = prevSelectedIdRef.current;
 
-      // Alt/Meta + Tab: in ersten Unterknoten springen
-      if ((e.key === 'Tab' && (e.altKey || e.metaKey)) && selectedId != null && selectedIds.size === 1) {
-        e.preventDefault();
-        const kids = getChildrenOf(selectedId);
-        if (kids.length > 0) {
-          const nextId = kids[0];
-          selectOnly(nextId);
-          const n = nodes.find(x => x.id === nextId);
-          if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
-        }
+        if (prevId == null || prevId === selectedId) return;
+        if (!nodes.some(n => n.id === prevId)) return;
+
+        selectOnly(prevId);
+        const n = nodes.find(x => x.id === prevId);
+        if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
         return;
       }
 
@@ -939,6 +1077,53 @@ export default function App() {
         setContextMenu({ open:true, x:e.clientX, y:e.clientY, wx:w.x, wy:w.y, kind:'bg' });
       }}
     >
+      {/* kleine Toolbar fürs Speichern/Laden */}
+      <div
+        style={{
+          position: "fixed",
+          top: 5,
+          left: 5,
+          zIndex: 1500,
+          display: "flex",
+          gap: 10,
+          background: "rgba(255,255,255,0.9)",
+          padding: "5px 5px",
+          borderRadius: 10,
+          boxShadow: "0 4px 12px rgba(0,0,0,.12)",
+          border: "1px solid rgba(0,0,0,.06)",
+        }}
+      >
+        <button
+          onClick={exportToFile}
+          style={{ padding: "4px 5px", borderRadius: 0, border: "none", cursor: "pointer" }}
+        >
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+  <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
+  <path d="M12 8v6m0 0l-3-3m3 3l3-3" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
+
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          style={{ padding: "4px 5px", borderRadius: 8, border: "none", cursor: "pointer" }}
+        >
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+  <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
+  <path d="M12 16V10m0 0l-3 3m3-3l3 3" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+
+
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+      </div>
+
       {/* Zeichenfläche */}
       <svg
         ref={svgRef}
@@ -1135,7 +1320,7 @@ export default function App() {
           {contextMenu.kind === 'bg' && (
             <>
               <MenuItem
-                label="➕ Neuer Knoten"
+                label="➕ New Knot"
                 onClick={() => {
                   const id = (contextMenu.wx != null && contextMenu.wy != null)
                     ? addStandalone({ x: contextMenu.wx, y: contextMenu.wy })
@@ -1190,7 +1375,7 @@ export default function App() {
                     }}
                     style={{ background:'#eee', color:'#333', border:'none', padding:'6px 10px', borderRadius:10, cursor: selectedIds.size ? 'pointer' : 'not-allowed' }}
                   >
-                    🧽 eraser
+                    🧽 Rub
                   </button>
                 </div>
               </div>
@@ -1211,14 +1396,14 @@ export default function App() {
           {/* Knoten */}
           {contextMenu.kind === 'node' && (
             <>
-              <MenuItem label="✏️ Umbenennen" onClick={() => { if (contextMenu.targetNodeId!=null) { setEditingId(contextMenu.targetNodeId); setEditingText(nodes.find(n=>n.id===contextMenu.targetNodeId)?.label || ""); } setContextMenu({ ...contextMenu, open:false }); }} />
-              <MenuItem label="➕ Unterknoten" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = addChild(contextMenu.targetNodeId); selectOnly(id); } setContextMenu({ ...contextMenu, open:false }); }} />
-              <MenuItem label="➕ Nebenknoten" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = addSiblingOf(contextMenu.targetNodeId); selectOnly(id); } setContextMenu({ ...contextMenu, open:false }); }} />
-              <MenuItem label="⭐ Hervorheben" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = contextMenu.targetNodeId; pushHistory(); setNodes(prev => prev.map(n => n.id === id ? { ...n, bold: !n.bold } : n)); } setContextMenu({ ...contextMenu, open:false }); }} />
+              <MenuItem label="✏️ Rename" onClick={() => { if (contextMenu.targetNodeId!=null) { setEditingId(contextMenu.targetNodeId); setEditingText(nodes.find(n=>n.id===contextMenu.targetNodeId)?.label || ""); } setContextMenu({ ...contextMenu, open:false }); }} />
+              <MenuItem label="➕ Children" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = addChild(contextMenu.targetNodeId); selectOnly(id); } setContextMenu({ ...contextMenu, open:false }); }} />
+              <MenuItem label="➕ Partner" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = addSiblingOf(contextMenu.targetNodeId); selectOnly(id); } setContextMenu({ ...contextMenu, open:false }); }} />
+              <MenuItem label="⭐ Highlight" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = contextMenu.targetNodeId; pushHistory(); setNodes(prev => prev.map(n => n.id === id ? { ...n, bold: !n.bold } : n)); } setContextMenu({ ...contextMenu, open:false }); }} />
               <div style={{ height:1, background:'rgba(0,0,0,.08)', margin:'6px 0' }} />
 
               <div style={{ padding:'6px 10px' }}>
-                <div style={{ fontSize:12, opacity:.7, marginBottom:6 }}>Füllfarbe</div>
+                <div style={{ fontSize:12, opacity:.7, marginBottom:6 }}>Colour</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
                   {[
                     { name: "Neon Grün",  color: "#39FF14" },
@@ -1251,38 +1436,12 @@ export default function App() {
                       setContextMenu({ ...contextMenu, open:false });
                     }}
                     style={{ background:'#eee', color:'#333', border:'none', padding:'6px 10px', borderRadius:10 }}
-                  >Farbe weg</button>
-                </div>
-              </div>
-
-              {/* Rahmenfarbe */}
-              <div style={{ padding:'6px 10px' }}>
-                <div style={{ fontSize:12, opacity:.7, margin:'6px 0' }}>Rahmenfarbe</div>
-                <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
-                  {[
-                    { name: "Neon Grün",  color: "#39FF14" },
-                    { name: "Neon Gelb",  color: "#FFFF33" },
-                    { name: "Neon Rot",   color: "#FF073A" },
-                    { name: "Schwarz",    color: "#000000" },
-                  ].map(p => (
-                    <button
-                      key={`border-${p.color}`}
-                      title={p.name}
-                      onClick={() => {
-                        if (contextMenu.targetNodeId!=null) {
-                          pushHistory();
-                          setNodes(prev => prev.map(n => n.id === contextMenu.targetNodeId ? { ...n, strokeColor: p.color } : n));
-                        }
-                        setContextMenu({ ...contextMenu, open:false });
-                      }}
-                      style={{ width:24, height:24, borderRadius:6, border:'2px solid #555', background:p.color, padding:0, cursor:'pointer', boxShadow:'0 1px 4px rgba(0,0,0,.15)' }}
-                    />
-                  ))}
+                  >No Colour</button>
                 </div>
               </div>
 
               <div style={{ height:1, background:'rgba(0,0,0,.08)', margin:'6px 0' }} />
-              <MenuItem label="🗑️ Knoten löschen" onClick={() => { if (contextMenu.targetNodeId!=null) removeNodes([contextMenu.targetNodeId]); setContextMenu({ ...contextMenu, open:false }); }} />
+              <MenuItem label="🗑️ Delete" onClick={() => { if (contextMenu.targetNodeId!=null) removeNodes([contextMenu.targetNodeId]); setContextMenu({ ...contextMenu, open:false }); }} />
             </>
           )}
 
@@ -1290,7 +1449,7 @@ export default function App() {
           {contextMenu.kind === 'edge' && (
             <>
               <MenuItem
-                label="gestrichelt umschalten"
+                label="stitched"
                 onClick={() => {
                   if (contextMenu.targetEdgeId!=null) {
                     const id = contextMenu.targetEdgeId;
