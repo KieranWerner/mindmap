@@ -45,7 +45,8 @@ const CHILD_RADIUS = 160;
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 /** --- Utilities --- */
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+const clamp = (v: number, a: number, b: number) =>
+  Math.max(a, Math.min(b, v));
 const approxTextWidth = (text: string, fontSize: number) =>
   text.length * fontSize * 0.6;
 
@@ -88,9 +89,15 @@ function layoutLabel(label: string, baseFont: number, minW: number) {
     if (rebuild()) break;
   }
 
-  const textW = Math.max(...lines.map((t) => approxTextWidth(t, baseFont)), 0);
+  const textW = Math.max(
+    ...lines.map((t) => approxTextWidth(t, baseFont)),
+    0
+  );
   width = Math.max(width, Math.ceil(textW + paddingX * 2));
-  const height = Math.max(BASE_H, Math.ceil(lines.length * lineHeight + paddingY * 2));
+  const height = Math.max(
+    BASE_H,
+    Math.ceil(lines.length * lineHeight + paddingY * 2)
+  );
   return {
     lines: lines.length ? lines : [""],
     width,
@@ -104,25 +111,39 @@ function layoutLabel(label: string, baseFont: number, minW: number) {
 
 function hexToRgba60(hex: string) {
   const m = hex.replace("#", "");
-  const bigint = parseInt(m.length === 3 ? m.split("").map(c => c + c).join("") : m, 16);
+  const bigint = parseInt(
+    m.length === 3 ? m.split("").map((c) => c + c).join("") : m,
+    16
+  );
   const r = (bigint >> 16) & 255;
   const g = (bigint >> 8) & 255;
   const b = bigint & 255;
   return `rgba(${r},${g},${b},0.6)`;
 }
 
-function distPointToSeg(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
-  const vx = x2 - x1, vy = y2 - y1;
-  const wx = px - x1, wy = py - y1;
+function distPointToSeg(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+) {
+  const vx = x2 - x1,
+    vy = y2 - y1;
+  const wx = px - x1,
+    wy = py - y1;
   const len2 = vx * vx + vy * vy || 1e-6;
   let t = (wx * vx + wy * vy) / len2;
   t = Math.max(0, Math.min(1, t));
-  const cx = x1 + t * vx, cy = y1 + t * vy;
+  const cx = x1 + t * vx,
+    cy = y1 + t * vy;
   return Math.hypot(px - cx, py - cy);
 }
 
 const rectRadius = (n: MindNode) => Math.max(n.w, n.h) / 2;
-const cloneSnapshot = (s: Snapshot): Snapshot => JSON.parse(JSON.stringify(s));
+const cloneSnapshot = (s: Snapshot): Snapshot =>
+  JSON.parse(JSON.stringify(s));
 
 /** --- App --- */
 export default function App() {
@@ -143,8 +164,12 @@ export default function App() {
   const [edges, setEdges] = useState<Link[]>([]);
 
   const [selectedId, setSelectedId] = useState<number | null>(1);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set([1]));
-  const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(
+    new Set([1])
+  );
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<number>>(
+    new Set()
+  );
 
   /** Pan & Zoom */
   const [pan, setPan] = useState(() => ({
@@ -156,7 +181,7 @@ export default function App() {
   /** Refs */
   // Pfad-Navigation für Shift+Tab
   const shiftTabPathRef = useRef<number[] | null>(null); // [root, ..., leaf]
-  const shiftTabIndexRef = useRef<number>(0);            // aktueller Index im Pfad
+  const shiftTabIndexRef = useRef<number>(0); // aktueller Index im Pfad
 
   // zuletzt ausgewählter Knoten für Tab-Toggle
   const prevSelectedIdRef = useRef<number | null>(null);
@@ -168,23 +193,53 @@ export default function App() {
 
   const groupDragging = useRef(false);
   const groupStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const groupStartPositions = useRef<{ id: number; x: number; y: number }[]>([]);
+  const groupStartPositions = useRef<
+    { id: number; x: number; y: number }[]
+  >([]);
 
   const panning = useRef(false);
   const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panAtStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  const activeTouches = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const pinchStart = useRef<{ d: number; scale: number; panX: number; panY: number; cx: number; cy: number } | null>(null);
+  const activeTouches = useRef<
+    Map<number, { x: number; y: number }>
+  >(new Map());
+  const pinchStart = useRef<{
+    d: number;
+    scale: number;
+    panX: number;
+    panY: number;
+    cx: number;
+    cy: number;
+  } | null>(null);
 
-  const [marquee, setMarquee] = useState<{ active: boolean; x1: number; y1: number; x2: number; y2: number }>({ active: false, x1: 0, y1: 0, x2: 0, y2: 0 });
+  const [marquee, setMarquee] = useState<{
+    active: boolean;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  }>({ active: false, x1: 0, y1: 0, x2: 0, y2: 0 });
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const editInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [linking, setLinking] = useState<{ phase: "idle" | "pending" | "active"; sourceId: number | null; x: number; y: number; startX: number; startY: number }>
-  ({ phase: "idle", sourceId: null, x: 0, y: 0, startX: 0, startY: 0 });
+  const [linking, setLinking] = useState<{
+    phase: "idle" | "pending" | "active";
+    sourceId: number | null;
+    x: number;
+    y: number;
+    startX: number;
+    startY: number;
+  }>({
+    phase: "idle",
+    sourceId: null,
+    x: 0,
+    y: 0,
+    startX: 0,
+    startY: 0,
+  });
 
   const freshTyping = useRef<boolean>(true);
 
@@ -194,12 +249,14 @@ export default function App() {
   /** Kontextmenü (+ Klickposition in Weltkoordinaten) */
   const [contextMenu, setContextMenu] = useState<{
     open: boolean;
-    x: number; y: number; // Bildschirmposition
-    wx?: number; wy?: number; // Weltposition für „new knot“
-    kind: 'bg' | 'node' | 'edge';
+    x: number;
+    y: number; // Bildschirmposition
+    wx?: number;
+    wy?: number; // Weltposition für „new knot“
+    kind: "bg" | "node" | "edge";
     targetNodeId?: number;
     targetEdgeId?: number;
-  }>({ open:false, x:0, y:0, kind:'bg' });
+  }>({ open: false, x: 0, y: 0, kind: "bg" });
 
   // File-Input-Ref für Load-Dialog
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -214,7 +271,8 @@ export default function App() {
         const migrated: MindNode[] = data.nodes.map((n: any) => ({
           id: Number(n.id),
           label: String(n.label ?? ""),
-          x: Number(n.x), y: Number(n.y),
+          x: Number(n.x),
+          y: Number(n.y),
           w: Number(n.w ?? BASE_W),
           h: Number(n.h ?? BASE_H),
           strokeColor: n.strokeColor ?? "#333",
@@ -251,29 +309,43 @@ export default function App() {
     const svg = svgRef.current;
     if (!svg) return { x: 0, y: 0 };
     const rect = svg.getBoundingClientRect();
-    return { x: (clientX - rect.left - pan.x) / scale, y: (clientY - rect.top - pan.y) / scale };
+    return {
+      x: (clientX - rect.left - pan.x) / scale,
+      y: (clientY - rect.top - pan.y) / scale,
+    };
   }
   function toScreen(wx: number, wy: number) {
     return { x: pan.x + wx * scale, y: pan.y + wy * scale };
   }
-  function bringBoxIntoView(cx: number, cy: number, w: number, h: number, margin = 24) {
-    const svg = svgRef.current; if (!svg) return;
+  function bringBoxIntoView(
+    cx: number,
+    cy: number,
+    w: number,
+    h: number,
+    margin = 24
+  ) {
+    const svg = svgRef.current;
+    if (!svg) return;
     const rect = svg.getBoundingClientRect();
     const left = toScreen(cx - w / 2, cy - h / 2);
     const right = toScreen(cx + w / 2, cy + h / 2);
-    let newPanX = pan.x, newPanY = pan.y;
+    let newPanX = pan.x,
+      newPanY = pan.y;
     if (left.x < margin) newPanX += margin - left.x;
-    if (right.x > rect.width - margin) newPanX -= right.x - (rect.width - margin);
+    if (right.x > rect.width - margin)
+      newPanX -= right.x - (rect.width - margin);
     if (left.y < margin) newPanY += margin - left.y;
-    if (right.y > rect.height - margin) newPanY -= right.y - (rect.height - margin);
-    if (newPanX !== pan.x || newPanY !== pan.y) setPan({ x: newPanX, y: newPanY });
+    if (right.y > rect.height - margin)
+      newPanY -= right.y - (rect.height - margin);
+    if (newPanX !== pan.x || newPanY !== pan.y)
+      setPan({ x: newPanX, y: newPanY });
   }
-  function getCentroidAndDistance(points: {x:number,y:number}[]) {
+  function getCentroidAndDistance(points: { x: number; y: number }[]) {
     const cx = (points[0].x + points[1].x) / 2;
     const cy = (points[0].y + points[1].y) / 2;
     const dx = points[1].x - points[0].x;
     const dy = points[1].y - points[0].y;
-    const d  = Math.hypot(dx, dy);
+    const d = Math.hypot(dx, dy);
     return { cx, cy, d };
   }
   function selectOnly(id: number) {
@@ -313,9 +385,10 @@ export default function App() {
       if (d < rectRadius(n) + newR + NODE_PADDING) return false;
     }
     for (const e of edges) {
-      if (parentId && (e.source === parentId || e.target === parentId)) continue;
-      const s = nodes.find(n => n.id === e.source);
-      const t = nodes.find(n => n.id === e.target);
+      if (parentId && (e.source === parentId || e.target === parentId))
+        continue;
+      const s = nodes.find((n) => n.id === e.source);
+      const t = nodes.find((n) => n.id === e.target);
       if (!s || !t) continue;
       const d = distPointToSeg(x, y, s.x, s.y, t.x, t.y);
       if (d < Math.max(BASE_W, BASE_H) / 2 + EDGE_PADDING) return false;
@@ -324,15 +397,23 @@ export default function App() {
   }
   function ensureEdge(a: number, b: number) {
     if (a === b) return;
-    const exists = edges.some(ed => (ed.source === a && ed.target === b) || (ed.source === b && ed.target === a));
-    if (!exists) setEdges(es => [...es, { id: Date.now(), source: a, target: b }]);
+    const exists = edges.some(
+      (ed) =>
+        (ed.source === a && ed.target === b) ||
+        (ed.source === b && ed.target === a)
+    );
+    if (!exists)
+      setEdges((es) => [...es, { id: Date.now(), source: a, target: b }]);
   }
   function getParentId(childId: number): number | null {
-    const e = edges.find(ed => ed.target === childId);
+    const e = edges.find((ed) => ed.target === childId);
     return e ? e.source : null;
   }
   function getChildrenOf(parentId: number): number[] {
-    return edges.filter(e => e.source === parentId).map(e => e.target).sort((a,b)=>a-b);
+    return edges
+      .filter((e) => e.source === parentId)
+      .map((e) => e.target)
+      .sort((a, b) => a - b);
   }
   function buildRootPath(startId: number): number[] {
     const up: number[] = [];
@@ -352,17 +433,17 @@ export default function App() {
   function getSiblingsClockwise(currentId: number): number[] {
     const parentId = getParentId(currentId);
     if (parentId == null) return [];
-    const parent = nodes.find(n => n.id === parentId);
+    const parent = nodes.find((n) => n.id === parentId);
     if (!parent) return [];
     const siblings = getChildrenOf(parentId);
-    const withAngle = siblings.map(id => {
-      const c = nodes.find(n => n.id === id)!;
+    const withAngle = siblings.map((id) => {
+      const c = nodes.find((n) => n.id === id)!;
       const theta = Math.atan2(c.y - parent.y, c.x - parent.x);
       return { id, a: normAng(theta) };
     });
     // Uhrzeigersinn: absteigend (Canvas-Y wächst nach unten)
     withAngle.sort((p, q) => q.a - p.a);
-    return withAngle.map(x => x.id);
+    return withAngle.map((x) => x.id);
   }
   function resizeNodeForLabel(n: MindNode): MindNode {
     const baseFont = clamp(Math.round(n.h * 0.35), 12, 20);
@@ -492,18 +573,24 @@ export default function App() {
   function addStandalone(at: { x: number; y: number }): number;
   function addStandalone(at?: { x: number; y: number }): number {
     pushHistory();
-    const newId = nodes.length ? Math.max(...nodes.map(n => n.id)) + 1 : 1;
+    const newId = nodes.length ? Math.max(...nodes.map((n) => n.id)) + 1 : 1;
 
     let x: number, y: number;
 
     if (at) {
-      x = at.x; y = at.y;
+      x = at.x;
+      y = at.y;
       if (!isPositionFree(x, y)) {
-        let angle = 0, radius = 12;
+        let angle = 0,
+          radius = 12;
         for (let i = 0; i < 60; i++) {
           const nx = x + Math.cos(angle) * radius;
           const ny = y + Math.sin(angle) * radius;
-          if (isPositionFree(nx, ny)) { x = nx; y = ny; break; }
+          if (isPositionFree(nx, ny)) {
+            x = nx;
+            y = ny;
+            break;
+          }
           angle += GOLDEN_ANGLE;
           if (i % 6 === 5) radius += 12;
         }
@@ -511,39 +598,65 @@ export default function App() {
     } else {
       const svg = svgRef.current;
       if (!svg) {
-        const node: MindNode = { id: newId, label: "", x: 0, y: 0, w: BASE_W, h: BASE_H, strokeColor: "#333", bold:false };
-        setNodes(ns => [...ns, node]);
+        const node: MindNode = {
+          id: newId,
+          label: "",
+          x: 0,
+          y: 0,
+          w: BASE_W,
+          h: BASE_H,
+          strokeColor: "#333",
+          bold: false,
+        };
+        setNodes((ns) => [...ns, node]);
         return newId;
       }
       const rect = svg.getBoundingClientRect();
       const wx = (rect.width / 2 - pan.x) / scale;
       const wy = (rect.height / 2 - pan.y) / scale;
-      x = wx; y = wy;
-      let angle = 0, radius = 0;
+      x = wx;
+      y = wy;
+      let angle = 0,
+        radius = 0;
       for (let i = 0; i < 120; i++) {
         const nx = wx + Math.cos(angle) * radius;
         const ny = wy + Math.sin(angle) * radius;
-        if (isPositionFree(nx, ny)) { x = nx; y = ny; break; }
+        if (isPositionFree(nx, ny)) {
+          x = nx;
+          y = ny;
+          break;
+        }
         angle += GOLDEN_ANGLE;
         if (i % 6 === 5) radius += 24;
       }
     }
 
-    const node: MindNode = { id: newId, label: "", x, y, w: BASE_W, h: BASE_H, strokeColor: "#333", fillColor: undefined, bold:false };
-    setNodes(ns => [...ns, node]);
+    const node: MindNode = {
+      id: newId,
+      label: "",
+      x,
+      y,
+      w: BASE_W,
+      h: BASE_H,
+      strokeColor: "#333",
+      fillColor: undefined,
+      bold: false,
+    };
+    setNodes((ns) => [...ns, node]);
     setTimeout(() => bringBoxIntoView(x, y, BASE_W, BASE_H), 0);
     return newId;
   }
 
   function addChild(parentId: number): number {
-    const parent = nodes.find(n => n.id === parentId);
+    const parent = nodes.find((n) => n.id === parentId);
     if (!parent) return parentId;
     pushHistory();
-    const newId = nodes.length ? Math.max(...nodes.map(n => n.id)) + 1 : 1;
+    const newId = nodes.length ? Math.max(...nodes.map((n) => n.id)) + 1 : 1;
 
     let angle = getChildrenOf(parentId).length * GOLDEN_ANGLE;
     let radius = CHILD_RADIUS;
-    let x = parent.x, y = parent.y;
+    let x = parent.x,
+      y = parent.y;
     for (let i = 0; i < 96; i++) {
       x = parent.x + Math.cos(angle) * radius;
       y = parent.y + Math.sin(angle) * radius;
@@ -553,11 +666,21 @@ export default function App() {
     }
 
     const child: MindNode = {
-      id: newId, label: "", x, y, w: BASE_W, h: BASE_H,
-      strokeColor: parent.strokeColor, fillColor: parent.fillColor, bold: false,
+      id: newId,
+      label: "",
+      x,
+      y,
+      w: BASE_W,
+      h: BASE_H,
+      strokeColor: parent.strokeColor,
+      fillColor: parent.fillColor,
+      bold: false,
     };
-    setNodes(ns => [...ns, child]);
-    setEdges(es => [...es, { id: Date.now(), source: parentId, target: newId }]);
+    setNodes((ns) => [...ns, child]);
+    setEdges((es) => [
+      ...es,
+      { id: Date.now(), source: parentId, target: newId },
+    ]);
     setTimeout(() => bringBoxIntoView(x, y, BASE_W, BASE_H), 0);
     return newId;
   }
@@ -572,7 +695,7 @@ export default function App() {
     if (!ids.length) return;
     pushHistory();
     const del = new Set(ids);
-    setEdges(prev => prev.filter(e => !del.has(e.id)));
+    setEdges((prev) => prev.filter((e) => !del.has(e.id)));
     setSelectedEdgeIds(new Set());
   }
   function removeNodes(ids: number[]) {
@@ -587,15 +710,17 @@ export default function App() {
       if (parent != null && !del.has(parent)) nextSelection = parent;
     }
 
-    setNodes(prev => prev.filter(n => !del.has(n.id)));
-    setEdges(prev => prev.filter(e => !del.has(e.source) && !del.has(e.target)));
+    setNodes((prev) => prev.filter((n) => !del.has(n.id)));
+    setEdges((prev) =>
+      prev.filter((e) => !del.has(e.source) && !del.has(e.target))
+    );
 
     if (nextSelection != null) {
       setSelectedId(nextSelection);
       setSelectedIds(new Set([nextSelection]));
       setSelectedEdgeIds(new Set());
       setTimeout(() => {
-        const n = nodes.find(x => x.id === nextSelection);
+        const n = nodes.find((x) => x.id === nextSelection);
         if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
       }, 0);
     } else {
@@ -603,21 +728,61 @@ export default function App() {
     }
   }
 
-  /** --- Pointer auf Node --- */
-  function onPointerDownNode(e: React.PointerEvent<SVGGElement>, id: number) {
+  /** --- Pointer auf Node (inkl. Mehrfachauswahl) --- */
+  function onPointerDownNode(
+    e: React.PointerEvent<SVGGElement>,
+    id: number
+  ) {
     if (editingId !== null) return;
 
-    if (e.shiftKey) {
-      e.preventDefault(); e.stopPropagation();
+    // Shift = Link-Modus
+    if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
       if (selectedId != null && selectedId !== id) {
-        pushHistory(); ensureEdge(selectedId, id); selectOnly(id); return;
+        pushHistory();
+        ensureEdge(selectedId, id);
+        selectOnly(id);
+        return;
       }
       selectOnly(id);
-      const src = nodes.find(n => n.id === id)!;
-      setLinking({ phase: "pending", sourceId: id, x: src.x, y: src.y, startX: src.x, startY: src.y });
+      const src = nodes.find((n) => n.id === id)!;
+      setLinking({
+        phase: "pending",
+        sourceId: id,
+        x: src.x,
+        y: src.y,
+        startX: src.x,
+        startY: src.y,
+      });
       return;
     }
+
     if (linking.phase !== "idle") return;
+
+    // Ctrl/Cmd = Mehrfachauswahl toggeln
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+
+        const idsArr = Array.from(next);
+        setSelectedId(idsArr[0] ?? null);
+        setSelectedEdgeIds(new Set());
+        freshTyping.current = true;
+
+        return next;
+      });
+
+      return; // kein Drag bei Ctrl-Klick
+    }
 
     const wasInSelection = selectedIds.has(id);
     freshTyping.current = true;
@@ -628,13 +793,13 @@ export default function App() {
     if (selectedIds.size > 1) {
       groupDragging.current = true;
       groupStart.current = { x: px, y: py };
-      groupStartPositions.current = Array.from(selectedIds).map(nid => {
-        const n = nodes.find(nn => nn.id === nid)!;
+      groupStartPositions.current = Array.from(selectedIds).map((nid) => {
+        const n = nodes.find((nn) => nn.id === nid)!;
         return { id: nid, x: n.x, y: n.y };
       });
     } else {
       draggingNodeId.current = id;
-      const node = nodes.find(n => n.id === id)!;
+      const node = nodes.find((n) => n.id === id)!;
       dragOffset.current = { dx: node.x - px, dy: node.y - py };
       somethingMoved.current = false;
     }
@@ -643,12 +808,22 @@ export default function App() {
   /** --- SVG Pointer --- */
   function onPointerDownSvg(e: React.PointerEvent<SVGSVGElement>) {
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-    activeTouches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    activeTouches.current.set(e.pointerId, {
+      x: e.clientX,
+      y: e.clientY,
+    });
 
     if (activeTouches.current.size === 2) {
       const pts = Array.from(activeTouches.current.values());
       const { cx, cy, d } = getCentroidAndDistance(pts);
-      pinchStart.current = { d, scale, panX: pan.x, panY: pan.y, cx, cy };
+      pinchStart.current = {
+        d,
+        scale,
+        panX: pan.x,
+        panY: pan.y,
+        cx,
+        cy,
+      };
     }
     panning.current = activeTouches.current.size < 2;
     panStart.current = { x: e.clientX, y: e.clientY };
@@ -657,7 +832,10 @@ export default function App() {
 
   function onPointerMoveSvg(e: React.PointerEvent<SVGSVGElement>) {
     if (activeTouches.current.has(e.pointerId)) {
-      activeTouches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      activeTouches.current.set(e.pointerId, {
+        x: e.clientX,
+        y: e.clientY,
+      });
       if (activeTouches.current.size === 2 && pinchStart.current) {
         e.preventDefault();
         const pts = Array.from(activeTouches.current.values());
@@ -667,11 +845,19 @@ export default function App() {
 
         const s0 = pinchStart.current.scale;
         let s = clamp(s0 * (d / pinchStart.current.d), 0.3, 3);
-        const wx0 = (pinchStart.current.cx - rect.left - pinchStart.current.panX) / pinchStart.current.scale;
-        const wy0 = (pinchStart.current.cy - rect.top  - pinchStart.current.panY) / pinchStart.current.scale;
+        const wx0 =
+          (pinchStart.current.cx -
+            rect.left -
+            pinchStart.current.panX) /
+          pinchStart.current.scale;
+        const wy0 =
+          (pinchStart.current.cy -
+            rect.top -
+            pinchStart.current.panY) /
+          pinchStart.current.scale;
 
-        const newPanX = (cx - rect.left) - wx0 * s;
-        const newPanY = (cy - rect.top)  - wy0 * s;
+        const newPanX = cx - rect.left - wx0 * s;
+        const newPanY = cy - rect.top - wy0 * s;
 
         setScale(s);
         setPan({ x: newPanX, y: newPanY });
@@ -681,15 +867,19 @@ export default function App() {
 
     if (marquee.active) {
       const { x, y } = toWorld(e.clientX, e.clientY);
-      setMarquee(m => ({ ...m, x2: x, y2: y }));
+      setMarquee((m) => ({ ...m, x2: x, y2: y }));
       return;
     }
     if (linking.phase === "pending" || linking.phase === "active") {
       const { x, y } = toWorld(e.clientX, e.clientY);
       const thresholdWorld = DRAG_THRESHOLD / scale;
-      const moved = Math.hypot(x - linking.startX, y - linking.startY) > thresholdWorld;
-      if (linking.phase === "pending" && moved) setLinking(l => ({ ...l, phase: "active", x, y }));
-      else if (linking.phase === "active") setLinking(l => ({ ...l, x, y }));
+      const moved =
+        Math.hypot(x - linking.startX, y - linking.startY) >
+        thresholdWorld;
+      if (linking.phase === "pending" && moved)
+        setLinking((l) => ({ ...l, phase: "active", x, y }));
+      else if (linking.phase === "active")
+        setLinking((l) => ({ ...l, x, y }));
       return;
     }
     if (groupDragging.current) {
@@ -697,14 +887,32 @@ export default function App() {
       const { x: px, y: py } = toWorld(e.clientX, e.clientY);
       const dx = px - groupStart.current.x;
       const dy = py - groupStart.current.y;
-      const posMap = new Map(groupStartPositions.current.map(p => [p.id, p]));
-      setNodes(prev => prev.map(n => selectedIds.has(n.id) ? { ...n, x: posMap.get(n.id)!.x + dx, y: posMap.get(n.id)!.y + dy } : n));
+      const posMap = new Map(
+        groupStartPositions.current.map((p) => [p.id, p])
+      );
+      setNodes((prev) =>
+        prev.map((n) =>
+          selectedIds.has(n.id)
+            ? {
+                ...n,
+                x: posMap.get(n.id)!.x + dx,
+                y: posMap.get(n.id)!.y + dy,
+              }
+            : n
+        )
+      );
       return;
     }
     if (draggingNodeId.current != null) {
       const { x: px, y: py } = toWorld(e.clientX, e.clientY);
       const id = draggingNodeId.current;
-      setNodes(prev => prev.map(n => n.id === id ? { ...n, x: px + dragOffset.current.dx, y: py + dragOffset.current.dy } : n));
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === id
+            ? { ...n, x: px + dragOffset.current.dx, y: py + dragOffset.current.dy }
+            : n
+        )
+      );
       somethingMoved.current = true;
       return;
     }
@@ -712,7 +920,10 @@ export default function App() {
     if (panning.current) {
       const dx = e.clientX - panStart.current.x;
       const dy = e.clientY - panStart.current.y;
-      setPan({ x: panAtStart.current.x + dx, y: panAtStart.current.y + dy });
+      setPan({
+        x: panAtStart.current.x + dx,
+        y: panAtStart.current.y + dy,
+      });
     }
   }
 
@@ -723,26 +934,71 @@ export default function App() {
     }
     if (marquee.active) {
       const { x1, y1, x2, y2 } = marquee;
-      const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-      const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
-      const ids = nodes.filter(n => n.x >= minX && n.x <= maxX && n.y >= minY && n.y <= maxY).map(n => n.id);
+      const minX = Math.min(x1, x2),
+        maxX = Math.max(x1, x2);
+      const minY = Math.min(y1, y2),
+        maxY = Math.max(y1, y2);
+      const ids = nodes
+        .filter(
+          (n) =>
+            n.x >= minX &&
+            n.x <= maxX &&
+            n.y >= minY &&
+            n.y <= maxY
+        )
+        .map((n) => n.id);
       selectFromArray(ids);
-      setMarquee({ active: false, x1: 0, y1: 0, x2: 0, y2: 0 });
+      setMarquee({
+        active: false,
+        x1: 0,
+        y1: 0,
+        x2: 0,
+        y2: 0,
+      });
     }
-    if ((linking.phase === "pending" || linking.phase === "active") && linking.sourceId != null) {
-      const targetId = findNodeAt(linking.x, linking.y, linking.sourceId);
+    if (
+      (linking.phase === "pending" || linking.phase === "active") &&
+      linking.sourceId != null
+    ) {
+      const targetId = findNodeAt(
+        linking.x,
+        linking.y,
+        linking.sourceId
+      );
       if (targetId) {
-        const exists = edges.some(ed =>
-          (ed.source === linking.sourceId && ed.target === targetId) ||
-          (ed.source === targetId && ed.target === linking.sourceId)
+        const exists = edges.some(
+          (ed) =>
+            (ed.source === linking.sourceId &&
+              ed.target === targetId) ||
+            (ed.source === targetId &&
+              ed.target === linking.sourceId)
         );
-        if (!exists) { pushHistory(); setEdges(es => [...es, { id: Date.now(), source: linking.sourceId!, target: targetId }]); }
+        if (!exists) {
+          pushHistory();
+          setEdges((es) => [
+            ...es,
+            {
+              id: Date.now(),
+              source: linking.sourceId!,
+              target: targetId,
+            },
+          ]);
+        }
         selectOnly(targetId);
       }
-      setLinking({ phase: "idle", sourceId: null, x: 0, y: 0, startX: 0, startY: 0 });
+      setLinking({
+        phase: "idle",
+        sourceId: null,
+        x: 0,
+        y: 0,
+        startX: 0,
+        startY: 0,
+      });
     }
 
-    if (somethingMoved.current) { pushHistory(); }
+    if (somethingMoved.current) {
+      pushHistory();
+    }
 
     draggingNodeId.current = null;
     groupDragging.current = false;
@@ -761,14 +1017,36 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       if (editingId != null) return;
       const active = document.activeElement as HTMLElement | null;
-      if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
+      if (
+        active &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.isContentEditable)
+      )
+        return;
 
       const hasNodeSel = selectedIds.size > 0;
       const hasEdgeSel = selectedEdgeIds.size > 0;
 
       // Undo/Redo
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === "z" || e.key === "Z")) { e.preventDefault(); undo(); return; }
-      if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z")))) { e.preventDefault(); redo(); return; }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.shiftKey &&
+        (e.key === "z" || e.key === "Z")
+      ) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === "y" ||
+          (e.shiftKey && (e.key === "Z" || e.key === "z")))
+      ) {
+        e.preventDefault();
+        redo();
+        return;
+      }
 
       // Größe +/- (Shift)
       if (e.shiftKey && (e.key === "+" || e.key === "=")) {
@@ -776,9 +1054,23 @@ export default function App() {
         const ids = Array.from(selectedIds);
         if (ids.length) {
           pushHistory();
-          setNodes(prev => prev.map(n => ids.includes(n.id)
-            ? { ...n, w: Math.min(420, Math.round(n.w * 1.2)), h: Math.min(240, Math.round(n.h * 1.15)) }
-            : n));
+          setNodes((prev) =>
+            prev.map((n) =>
+              ids.includes(n.id)
+                ? {
+                    ...n,
+                    w: Math.min(
+                      420,
+                      Math.round(n.w * 1.2)
+                    ),
+                    h: Math.min(
+                      240,
+                      Math.round(n.h * 1.15)
+                    ),
+                  }
+                : n
+            )
+          );
         }
         return;
       }
@@ -787,14 +1079,28 @@ export default function App() {
         const ids = Array.from(selectedIds);
         if (ids.length) {
           pushHistory();
-          setNodes(prev => prev.map(n => ids.includes(n.id)
-            ? { ...n, w: Math.max(80, Math.round(n.w / 1.2)), h: Math.max(48, Math.round(n.h / 1.15)) }
-            : n));
+          setNodes((prev) =>
+            prev.map((n) =>
+              ids.includes(n.id)
+                ? {
+                    ...n,
+                    w: Math.max(
+                      80,
+                      Math.round(n.w / 1.2)
+                    ),
+                    h: Math.max(
+                      48,
+                      Math.round(n.h / 1.15)
+                    ),
+                  }
+                : n
+            )
+          );
         }
         return;
       }
 
-      // Pfeile: Nachbarwahl (intuitiver)
+      // Pfeile: Nachbarwahl
       if (
         (e.key === "ArrowUp" ||
           e.key === "ArrowDown" ||
@@ -859,7 +1165,8 @@ export default function App() {
             }
             if (
               c.dist < best.dist - 1e-3 ||
-              (Math.abs(c.dist - best.dist) <= 1e-3 && c.angle < best.angle)
+              (Math.abs(c.dist - best.dist) <= 1e-3 &&
+                c.angle < best.angle)
             ) {
               best = c;
             }
@@ -885,14 +1192,24 @@ export default function App() {
       }
 
       // Enter: Child / Shift+Enter: Sibling
-      if (e.key === "Enter" && selectedId != null && selectedIds.size === 1 && !e.shiftKey) {
+      if (
+        e.key === "Enter" &&
+        selectedId != null &&
+        selectedIds.size === 1 &&
+        !e.shiftKey
+      ) {
         e.preventDefault();
         const newId = addChild(selectedId);
         selectOnly(newId);
         freshTyping.current = true;
         return;
       }
-      if (e.key === "Enter" && e.shiftKey && selectedId != null && selectedIds.size === 1) {
+      if (
+        e.key === "Enter" &&
+        e.shiftKey &&
+        selectedId != null &&
+        selectedIds.size === 1
+      ) {
         e.preventDefault();
         const newId = addSiblingOf(selectedId);
         selectOnly(newId);
@@ -901,10 +1218,16 @@ export default function App() {
       }
 
       // Escape: Auswahl löschen
-      if (e.key === "Escape") { clearSelection(); return; }
+      if (e.key === "Escape") {
+        clearSelection();
+        return;
+      }
 
-      // Shift+Backspace oder Delete: löschen (Knoten bevorzugt, sonst Kanten)
-      if ((e.key === "Backspace" && e.shiftKey) || e.key === "Delete") {
+      // Shift+Backspace oder Delete: löschen
+      if (
+        (e.key === "Backspace" && e.shiftKey) ||
+        e.key === "Delete"
+      ) {
         e.preventDefault();
         if (hasNodeSel) removeNodes(Array.from(selectedIds));
         else if (hasEdgeSel) removeEdges(Array.from(selectedEdgeIds));
@@ -915,21 +1238,34 @@ export default function App() {
       if (e.key === "Backspace") {
         e.preventDefault();
         const ids = Array.from(selectedIds);
-        if (ids.length > 1) { removeNodes(ids); return; }
+        if (ids.length > 1) {
+          removeNodes(ids);
+          return;
+        }
         if (ids.length === 1) {
           const id = ids[0];
           pushHistory();
-          setNodes(prev => prev.map(n => {
-            if (n.id !== id) return n;
-            const next = n.label.slice(0, Math.max(0, n.label.length - 1));
-            return resizeNodeForLabel({ ...n, label: next });
-          }));
+          setNodes((prev) =>
+            prev.map((n) => {
+              if (n.id !== id) return n;
+              const next = n.label.slice(
+                0,
+                Math.max(0, n.label.length - 1)
+              );
+              return resizeNodeForLabel({ ...n, label: next });
+            })
+          );
         }
         return;
       }
 
-      // Shift+Tab: nach oben (Parent). Am Root angekommen → wieder nach unten laufen.
-      if (e.key === "Tab" && e.shiftKey && selectedId != null && selectedIds.size === 1) {
+      // Shift+Tab: nach oben (Parent). Am Root angekommen → wieder nach unten.
+      if (
+        e.key === "Tab" &&
+        e.shiftKey &&
+        selectedId != null &&
+        selectedIds.size === 1
+      ) {
         e.preventDefault();
 
         if (
@@ -957,38 +1293,50 @@ export default function App() {
         shiftTabIndexRef.current = idx;
         const nextId = path[idx];
         selectOnly(nextId);
-        const n = nodes.find(x => x.id === nextId);
+        const n = nodes.find((x) => x.id === nextId);
         if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
         return;
       }
 
-      // Tab: zum vorher markierten Knoten springen (Toggle zwischen zwei Knoten)
-      if (e.key === "Tab" && !e.shiftKey && selectedId != null && selectedIds.size === 1) {
+      // Tab: zum vorher markierten Knoten springen
+      if (
+        e.key === "Tab" &&
+        !e.shiftKey &&
+        selectedId != null &&
+        selectedIds.size === 1
+      ) {
         e.preventDefault();
         const prevId = prevSelectedIdRef.current;
 
         if (prevId == null || prevId === selectedId) return;
-        if (!nodes.some(n => n.id === prevId)) return;
+        if (!nodes.some((n) => n.id === prevId)) return;
 
         selectOnly(prevId);
-        const n = nodes.find(x => x.id === prevId);
+        const n = nodes.find((x) => x.id === prevId);
         if (n) bringBoxIntoView(n.x, n.y, n.w, n.h);
         return;
       }
 
       // Tippen: Text in Knoten/Kante
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (
+        e.key.length === 1 &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
         const char = e.key;
 
         if (selectedEdgeIds.size) {
           pushHistory();
           const replaceAll = freshTyping.current;
-          setEdges(prev => prev.map(ed => {
-            if (!selectedEdgeIds.has(ed.id)) return ed;
-            const cur = ed.label ?? "";
-            const next = replaceAll ? char : cur + char;
-            return { ...ed, label: next };
-          }));
+          setEdges((prev) =>
+            prev.map((ed) => {
+              if (!selectedEdgeIds.has(ed.id)) return ed;
+              const cur = ed.label ?? "";
+              const next = replaceAll ? char : cur + char;
+              return { ...ed, label: next };
+            })
+          );
           freshTyping.current = false;
           return;
         }
@@ -997,11 +1345,16 @@ export default function App() {
           pushHistory();
           const ids = Array.from(selectedIds);
           const replaceAll = freshTyping.current;
-          setNodes(prev => prev.map(n => {
-            if (!ids.includes(n.id)) return n;
-            const nextText = replaceAll ? char : (n.label + char);
-            return resizeNodeForLabel({ ...n, label: nextText });
-          }));
+          setNodes((prev) =>
+            prev.map((n) => {
+              if (!ids.includes(n.id)) return n;
+              const nextText = replaceAll ? char : n.label + char;
+              return resizeNodeForLabel({
+                ...n,
+                label: nextText,
+              });
+            })
+          );
           freshTyping.current = false;
           return;
         }
@@ -1010,7 +1363,17 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedId, selectedIds, selectedEdgeIds, editingId, linking.phase, edges, nodes, pan, scale]);
+  }, [
+    selectedId,
+    selectedIds,
+    selectedEdgeIds,
+    editingId,
+    linking.phase,
+    edges,
+    nodes,
+    pan,
+    scale,
+  ]);
 
   /** Hintergrund-Interaktionen */
   function onPointerDownBg(e: React.PointerEvent<SVGRectElement>) {
@@ -1020,7 +1383,13 @@ export default function App() {
     if (e.shiftKey) {
       e.preventDefault();
       const { x, y } = toWorld(e.clientX, e.clientY);
-      setMarquee({ active: true, x1: x, y1: y, x2: x, y2: y });
+      setMarquee({
+        active: true,
+        x1: x,
+        y1: y,
+        x2: x,
+        y2: y,
+      });
       return;
     }
     clearSelection();
@@ -1055,7 +1424,10 @@ export default function App() {
       return;
     }
 
-    setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
+    setPan((prev) => ({
+      x: prev.x - e.deltaX,
+      y: prev.y - e.deltaY,
+    }));
   }
 
   /** --- Render --- */
@@ -1068,13 +1440,24 @@ export default function App() {
         overflow: "hidden",
         userSelect: "none",
         fontFamily:
-          "Inter, Roboto, Noto Sans, Ubuntu, Cantarell, system-ui, -apple-system, Helvetica, Arial, sans-serif",
+          "Inter, system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif",
+        WebkitFontSmoothing: "antialiased",
       }}
-      onClick={() => { if (contextMenu.open) setContextMenu({ ...contextMenu, open:false }); }}
+      onClick={() => {
+        if (contextMenu.open)
+          setContextMenu({ ...contextMenu, open: false });
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         const w = toWorld(e.clientX, e.clientY);
-        setContextMenu({ open:true, x:e.clientX, y:e.clientY, wx:w.x, wy:w.y, kind:'bg' });
+        setContextMenu({
+          open: true,
+          x: e.clientX,
+          y: e.clientY,
+          wx: w.x,
+          wy: w.y,
+          kind: "bg",
+        });
       }}
     >
       {/* kleine Toolbar fürs Speichern/Laden */}
@@ -1091,29 +1474,62 @@ export default function App() {
           borderRadius: 10,
           boxShadow: "0 4px 12px rgba(0,0,0,.12)",
           border: "1px solid rgba(0,0,0,.06)",
+          backdropFilter: "blur(6px)",
         }}
       >
         <button
           onClick={exportToFile}
-          style={{ padding: "4px 5px", borderRadius: 0, border: "none", cursor: "pointer" }}
+          style={{
+            padding: "4px 5px",
+            borderRadius: 6,
+            border: "none",
+            cursor: "pointer",
+            background: "transparent",
+          }}
         >
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-  <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
-  <path d="M12 8v6m0 0l-3-3m3 3l3-3" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-
-
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="currentColor"
+          >
+            <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
+            <path
+              d="M12 8v6m0 0l-3-3m3 3l3-3"
+              stroke="white"
+              strokeWidth="2"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          style={{ padding: "4px 5px", borderRadius: 8, border: "none", cursor: "pointer" }}
+          style={{
+            padding: "4px 5px",
+            borderRadius: 6,
+            border: "none",
+            cursor: "pointer",
+            background: "transparent",
+          }}
         >
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-  <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
-  <path d="M12 16V10m0 0l-3 3m3-3l3 3" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
-
-
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="currentColor"
+          >
+            <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
+            <path
+              d="M12 16V10m0 0l-3 3m3-3l3 3"
+              stroke="white"
+              strokeWidth="2"
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
         <input
           ref={fileInputRef}
@@ -1135,9 +1551,11 @@ export default function App() {
         onPointerLeave={onPointerUpSvg}
         onPointerCancel={onPointerCancelSvg}
         onWheel={onWheelSvg}
+        shapeRendering="geometricPrecision"
+        textRendering="geometricPrecision"
         style={{
           touchAction: "none",
-          background: "#fff",
+          background: "#ffffff",
           cursor:
             groupDragging.current || draggingNodeId.current
               ? "grabbing"
@@ -1148,8 +1566,21 @@ export default function App() {
         }}
       >
         <defs>
-          <pattern id="dotGrid" width="32" height="32" patternUnits="userSpaceOnUse">
-            <rect x="0" y="0" width="2.4" height="2.4" fill="#b6c2d1" opacity="0.5" />
+          <pattern
+            id="dotGrid"
+            width="32"
+            height="32"
+            patternUnits="userSpaceOnUse"
+          >
+            <rect
+              x="0"
+              y="0"
+              width="2"
+              height="2"
+              fill="#cbd5e1"
+              opacity="0.7"
+              shapeRendering="crispEdges"
+            />
           </pattern>
         </defs>
         <g transform={`translate(${pan.x},${pan.y}) scale(${scale})`}>
@@ -1164,7 +1595,14 @@ export default function App() {
             onContextMenu={(e) => {
               e.preventDefault();
               const w = toWorld(e.clientX, e.clientY);
-              setContextMenu({ open:true, x:e.clientX, y:e.clientY, wx:w.x, wy:w.y, kind:'bg' });
+              setContextMenu({
+                open: true,
+                x: e.clientX,
+                y: e.clientY,
+                wx: w.x,
+                wy: w.y,
+                kind: "bg",
+              });
             }}
           />
 
@@ -1174,20 +1612,40 @@ export default function App() {
             const t = nodes.find((n) => n.id === e.target);
             if (!s || !t) return null;
 
-            const highlightedNodeSide = selectedIds.has(e.source) || selectedIds.has(e.target);
+            const highlightedNodeSide =
+              selectedIds.has(e.source) ||
+              selectedIds.has(e.target);
             const isEdgeSelected = selectedEdgeIds.has(e.id);
 
-            const stroke = isEdgeSelected ? "#1976d2" : (highlightedNodeSide ? "#1976d2" : "#888");
-            const strokeWidth = isEdgeSelected ? 4 : (highlightedNodeSide ? 3 : 2);
+            const stroke = isEdgeSelected
+              ? "#1976d2"
+              : highlightedNodeSide
+              ? "#1976d2"
+              : "#888";
+            const strokeWidth = isEdgeSelected
+              ? 3
+              : highlightedNodeSide
+              ? 2.5
+              : 1.5;
             const dash = e.dashed ? "8 6" : undefined;
 
-            const onEdgePointerDown = (evt: React.PointerEvent<SVGLineElement | SVGPathElement>) => {
+            const onEdgePointerDown = (
+              evt:
+                | React.PointerEvent<SVGLineElement>
+                | React.PointerEvent<SVGPathElement>
+            ) => {
               evt.stopPropagation();
-              setSelectedIds(new Set()); setSelectedId(null);
-              setSelectedEdgeIds(prev => {
+              setSelectedIds(new Set());
+              setSelectedId(null);
+              setSelectedEdgeIds((prev) => {
                 const next = new Set(prev);
-                if (evt.shiftKey) { if (next.has(e.id)) next.delete(e.id); else next.add(e.id); }
-                else { next.clear(); next.add(e.id); }
+                if (evt.shiftKey) {
+                  if (next.has(e.id)) next.delete(e.id);
+                  else next.add(e.id);
+                } else {
+                  next.clear();
+                  next.add(e.id);
+                }
                 return next;
               });
               freshTyping.current = true;
@@ -1198,17 +1656,63 @@ export default function App() {
 
             return (
               <g key={e.id}>
+                {/* breiter Hit-Bereich */}
                 <line
-                  x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                  stroke="transparent" strokeWidth={Math.max(12 / scale, 6)}
+                  x1={s.x}
+                  y1={s.y}
+                  x2={t.x}
+                  y2={t.y}
+                  stroke="transparent"
+                  strokeWidth={Math.max(12 / scale, 6)}
                   onPointerDown={onEdgePointerDown}
-                  onContextMenu={(evt)=>{ evt.preventDefault(); evt.stopPropagation(); setSelectedIds(new Set()); setSelectedId(null); setSelectedEdgeIds(new Set([e.id])); setContextMenu({ open:true, x:evt.clientX, y:evt.clientY, kind:'edge', targetEdgeId:e.id }); }}
+                  onContextMenu={(evt) => {
+                    evt.preventDefault();
+                    evt.stopPropagation();
+                    setSelectedIds(new Set());
+                    setSelectedId(null);
+                    setSelectedEdgeIds(new Set([e.id]));
+                    setContextMenu({
+                      open: true,
+                      x: evt.clientX,
+                      y: evt.clientY,
+                      kind: "edge",
+                      targetEdgeId: e.id,
+                    });
+                  }}
                 />
-                <line x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke={stroke} strokeWidth={strokeWidth} strokeDasharray={dash} />
+                <line
+                  x1={s.x}
+                  y1={s.y}
+                  x2={t.x}
+                  y2={t.y}
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  strokeDasharray={dash}
+                  vectorEffect="non-scaling-stroke"
+                />
                 {e.label && (
                   <g pointerEvents="none">
-                    <rect x={mx - (e.label.length * 6)} y={my - 10} width={Math.max(24, e.label.length * 12)} height={20} rx={6} ry={6} fill="rgba(255,255,255,0.9)" />
-                    <text x={mx} y={my + 5} textAnchor="middle" fontSize={12} fill={isEdgeSelected ? "#1976d2" : "#333"}>{e.label}</text>
+                    <rect
+                      x={mx - e.label.length * 6}
+                      y={my - 10}
+                      width={Math.max(24, e.label.length * 12)}
+                      height={20}
+                      rx={6}
+                      ry={6}
+                      fill="rgba(255,255,255,0.95)"
+                      stroke="rgba(15,23,42,0.08)"
+                      strokeWidth={0.5}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <text
+                      x={mx}
+                      y={my + 5}
+                      textAnchor="middle"
+                      fontSize={12}
+                      fill={isEdgeSelected ? "#1976d2" : "#0f172a"}
+                    >
+                      {e.label}
+                    </text>
                   </g>
                 )}
               </g>
@@ -1216,39 +1720,111 @@ export default function App() {
           })}
 
           {/* temporäre Kante */}
-          {linking.phase === "active" && linking.sourceId != null && (() => {
-            const s = nodes.find((n) => n.id === linking.sourceId)!;
-            return <line x1={s.x} y1={s.y} x2={linking.x} y2={linking.y} stroke="#1976d2" strokeWidth={2} strokeDasharray="6 4" />;
-          })()}
+          {linking.phase === "active" &&
+            linking.sourceId != null &&
+            (() => {
+              const s = nodes.find(
+                (n) => n.id === linking.sourceId
+              )!;
+              return (
+                <line
+                  x1={s.x}
+                  y1={s.y}
+                  x2={linking.x}
+                  y2={linking.y}
+                  stroke="#1976d2"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })()}
 
           {/* Knoten */}
           {nodes.map((n) => {
             const isEditing = editingId === n.id;
             const isSelected = selectedIds.has(n.id);
 
-            const baseFont = clamp(Math.round(n.h * 0.35), 12, 20);
+            const baseFont = clamp(
+              Math.round(n.h * 0.35),
+              12,
+              20
+            );
             const displayText = isEditing ? editingText : n.label;
             const L = layoutLabel(displayText, baseFont, n.w);
             const textLines = L.lines;
 
-            const corner = Math.round(Math.min(n.w, n.h) * 0.28);
-            const stroke = isSelected ? "#1976d2" : (n.strokeColor || "#000");
-            const strokeW = isSelected ? 4 : 2;
+            const corner = Math.round(
+              Math.min(n.w, n.h) * 0.24
+            );
+            const stroke = isSelected
+              ? "#1976d2"
+              : n.strokeColor || "#0f172a";
+            const strokeW = isSelected ? 2.5 : 1.5;
 
-            const startY = -((textLines.length - 1) / 2) * L.lineHeight;
+            const startY =
+              -((textLines.length - 1) / 2) * L.lineHeight;
 
             return (
               <g
                 key={n.id}
                 transform={`translate(${n.x},${n.y})`}
                 onPointerDown={(e) => onPointerDownNode(e, n.id)}
-                onDoubleClick={() => { selectOnly(n.id); freshTyping.current = true;  }}
-                onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); selectOnly(n.id); setContextMenu({ open:true, x:e.clientX, y:e.clientY, kind:'node', targetNodeId:n.id }); }}
+                onDoubleClick={() => {
+                  selectOnly(n.id);
+                  freshTyping.current = true;
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+
+                  // Mehrfachauswahl behalten, falls Node schon selektiert ist
+                  if (!selectedIds.has(n.id)) {
+                    selectOnly(n.id);
+                  }
+
+                  setContextMenu({
+                    open: true,
+                    x: e.clientX,
+                    y: e.clientY,
+                    kind: "node",
+                    targetNodeId: n.id,
+                  });
+                }}
               >
                 {/* Box */}
-                <rect x={-n.w/2} y={-n.h/2} width={n.w} height={n.h} rx={corner} ry={corner} fill="#fff" />
-                {n.fillColor && <rect x={-n.w/2} y={-n.h/2} width={n.w} height={n.h} rx={corner} ry={corner} fill={n.fillColor} />}
-                <rect x={-n.w/2} y={-n.h/2} width={n.w} height={n.h} rx={corner} ry={corner} fill="none" stroke={stroke} strokeWidth={strokeW} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))" }} />
+                <rect
+                  x={-n.w / 2}
+                  y={-n.h / 2}
+                  width={n.w}
+                  height={n.h}
+                  rx={corner}
+                  ry={corner}
+                  fill="#ffffff"
+                />
+                {n.fillColor && (
+                  <rect
+                    x={-n.w / 2}
+                    y={-n.h / 2}
+                    width={n.w}
+                    height={n.h}
+                    rx={corner}
+                    ry={corner}
+                    fill={n.fillColor}
+                  />
+                )}
+                <rect
+                  x={-n.w / 2}
+                  y={-n.h / 2}
+                  width={n.w}
+                  height={n.h}
+                  rx={corner}
+                  ry={corner}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={strokeW}
+                  vectorEffect="non-scaling-stroke"
+                />
 
                 {/* Text */}
                 <g pointerEvents="none">
@@ -1260,9 +1836,8 @@ export default function App() {
                       x={0}
                       y={startY + i * L.lineHeight}
                       fontSize={L.fontSize}
-                      fontWeight={n.bold ? 700 : 400}
-                      fill={isSelected ? "#1976d2" : "#000"}
-                      style={{ userSelect: "text" }}
+                      fontWeight={n.bold ? 700 : 500}
+                      fill={isSelected ? "#0f172a" : "#111827"}
                     >
                       {line}
                     </text>
@@ -1271,7 +1846,12 @@ export default function App() {
 
                 {/* Unsichtbares Input */}
                 {isEditing && (
-                  <foreignObject x={-n.w/2 + 8} y={-n.h/2 + 6} width={n.w - 16} height={n.h - 12}>
+                  <foreignObject
+                    x={-n.w / 2 + 8}
+                    y={-n.h / 2 + 6}
+                    width={n.w - 16}
+                    height={n.h - 12}
+                  >
                     <input
                       ref={editInputRef}
                       value={editingText}
@@ -1280,16 +1860,40 @@ export default function App() {
                         setEditingText(v);
                         if (editingId != null) {
                           pushHistory();
-                          setNodes(prev => prev.map(nn => nn.id === editingId ? resizeNodeForLabel({ ...nn, label: v }) : nn));
+                          setNodes((prev) =>
+                            prev.map((nn) =>
+                              nn.id === editingId
+                                ? resizeNodeForLabel({
+                                    ...nn,
+                                    label: v,
+                                  })
+                                : nn
+                            )
+                          );
                         }
                       }}
                       onBlur={() => setEditingId(null)}
-                      onKeyDown={(e) => { if (e.key === "Enter") setEditingId(null); if (e.key === "Escape") setEditingId(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") setEditingId(null);
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
                       style={{
-                        width: "100%", height: "100%", border: "none", background: "transparent",
-                        color: "transparent", caretColor: isSelected ? "#1976d2" : "#000", padding: 0, margin: 0,
-                        fontSize: L.fontSize, lineHeight: `${L.lineHeight}px`, textAlign: "center", outline: "none",
-                        fontFamily: "Inter, Roboto, Noto Sans, Ubuntu, Cantarell, system-ui, -apple-system, Helvetica, Arial, sans-serif",
+                        width: "100%",
+                        height: "100%",
+                        border: "none",
+                        background: "transparent",
+                        color: "transparent",
+                        caretColor: isSelected
+                          ? "#1976d2"
+                          : "#000",
+                        padding: 0,
+                        margin: 0,
+                        fontSize: L.fontSize,
+                        lineHeight: `${L.lineHeight}px`,
+                        textAlign: "center",
+                        outline: "none",
+                        fontFamily:
+                          "Inter, system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif",
                       }}
                     />
                   </foreignObject>
@@ -1299,69 +1903,139 @@ export default function App() {
           })}
 
           {/* Marquee */}
-          {marquee.active && (() => {
-            const { x1, y1, x2, y2 } = marquee;
-            const x = Math.min(x1, x2);
-            const y = Math.min(y1, y2);
-            const w = Math.abs(x2 - x1);
-            const h = Math.abs(y2 - y1);
-            return <rect x={x} y={y} width={w} height={h} fill="#1976d2" fillOpacity={0.12} stroke="#1976d2" strokeDasharray="6 4" />;
-          })()}
+          {marquee.active &&
+            (() => {
+              const { x1, y1, x2, y2 } = marquee;
+              const x = Math.min(x1, x2);
+              const y = Math.min(y1, y2);
+              const w = Math.abs(x2 - x1);
+              const h = Math.abs(y2 - y1);
+              return (
+                <rect
+                  x={x}
+                  y={y}
+                  width={w}
+                  height={h}
+                  fill="#93c5fd"
+                  fillOpacity={0.18}
+                  stroke="#2563eb"
+                  strokeDasharray="6 4"
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })()}
         </g>
       </svg>
 
       {/* Rechtsklick-Menü */}
       {contextMenu.open && (
         <div
-          style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 2000, background: '#fff', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.18)', padding: 6, minWidth: 240, border: '1px solid rgba(0,0,0,.08)' }}
+          style={{
+            position: "fixed",
+            left: contextMenu.x,
+            top: contextMenu.y,
+            zIndex: 2000,
+            background: "#ffffff",
+            borderRadius: 10,
+            boxShadow: "0 8px 24px rgba(15,23,42,.18)",
+            padding: 6,
+            minWidth: 240,
+            border: "1px solid rgba(15,23,42,.06)",
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Hintergrund */}
-          {contextMenu.kind === 'bg' && (
+          {contextMenu.kind === "bg" && (
             <>
               <MenuItem
-                label="➕ New Knot"
+                label="➕ New Node"
                 onClick={() => {
-                  const id = (contextMenu.wx != null && contextMenu.wy != null)
-                    ? addStandalone({ x: contextMenu.wx, y: contextMenu.wy })
-                    : addStandalone();
+                  const id =
+                    contextMenu.wx != null &&
+                    contextMenu.wy != null
+                      ? addStandalone({
+                          x: contextMenu.wx,
+                          y: contextMenu.wy,
+                        })
+                      : addStandalone();
                   selectOnly(id);
-                  setContextMenu({ ...contextMenu, open: false });
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
                 }}
               />
 
-              <div style={{ height: 1, background: 'rgba(0,0,0,.08)', margin: '6px 0' }} />
-              <div style={{ padding: '6px 10px' }}>
-                <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
-                  colour
+              <div
+                style={{
+                  height: 1,
+                  background: "rgba(15,23,42,.08)",
+                  margin: "6px 0",
+                }}
+              />
+              <div style={{ padding: "6px 10px" }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    opacity: 0.7,
+                    marginBottom: 6,
+                  }}
+                >
+                  Color
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
                   {[
-                    { name: "Neon Grün",  color: "#39FF14" },
-                    { name: "Neon Gelb",  color: "#FFFF33" },
-                    { name: "Neon Rot",   color: "#FF073A" },
-                    { name: "Schwarz",    color: "#000000" },
+                    { name: "Blue", color: "#90caf9" },
+                    { name: "Green", color: "#a5d6a7" },
+                    { name: "Yellow", color: "#ffe082" },
+                    { name: "Red", color: "#ef9a9a" },
                   ].map((p) => (
                     <button
                       key={`bg-${p.color}`}
-                      title={selectedIds.size ? p.name : 'Kein Knoten ausgewählt'}
-                      disabled={selectedIds.size === 0}
                       onClick={() => {
                         const ids = Array.from(selectedIds);
                         if (!ids.length) return;
                         const rgba = hexToRgba60(p.color);
                         pushHistory();
-                        setNodes(prev => prev.map(n => ids.includes(n.id) ? { ...n, fillColor: rgba } : n));
-                        setContextMenu({ ...contextMenu, open: false });
+                        setNodes((prev) =>
+                          prev.map((n) =>
+                            ids.includes(n.id)
+                              ? { ...n, fillColor: rgba }
+                              : n
+                          )
+                        );
+                        setContextMenu({
+                          ...contextMenu,
+                          open: false,
+                        });
                       }}
                       style={{
-                        width: 24, height: 24, borderRadius: 6, border: '1px solid #555', background: '#fff', padding: 0,
-                        cursor: selectedIds.size ? 'pointer' : 'not-allowed',
-                        opacity: selectedIds.size ? 1 : 0.5,
-                        boxShadow: '0 1px 4px rgba(0,0,0,.15)',
+                        width: 28,
+                        height: 28,
+                        border: "none",
+                        background: "transparent",
+                        padding: 0,
+                        cursor: selectedIds.size
+                          ? "pointer"
+                          : "not-allowed",
                       }}
                     >
-                      <span style={{ display: 'block', width: 18, height: 18, borderRadius: 5, background: p.color, margin: '3px' }} />
+                      <span
+                        style={{
+                          display: "block",
+                          width: 24,
+                          height: 24,
+                          borderRadius: 8,
+                          background: p.color,
+                        }}
+                      />
                     </button>
                   ))}
                   <button
@@ -1370,113 +2044,346 @@ export default function App() {
                       const ids = Array.from(selectedIds);
                       if (!ids.length) return;
                       pushHistory();
-                      setNodes(prev => prev.map(n => ids.includes(n.id) ? { ...n, fillColor: undefined } : n));
-                      setContextMenu({ ...contextMenu, open: false });
+                      setNodes((prev) =>
+                        prev.map((n) =>
+                          ids.includes(n.id)
+                            ? { ...n, fillColor: undefined }
+                            : n
+                        )
+                      );
+                      setContextMenu({
+                        ...contextMenu,
+                        open: false,
+                      });
                     }}
-                    style={{ background:'#eee', color:'#333', border:'none', padding:'6px 10px', borderRadius:10, cursor: selectedIds.size ? 'pointer' : 'not-allowed' }}
+                    style={{
+                      background: "#e5e7eb",
+                      color: "#111827",
+                      border: "none",
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      cursor: selectedIds.size
+                        ? "pointer"
+                        : "not-allowed",
+                      fontSize: 12,
+                    }}
                   >
-                    🧽 Rub
+                    Clear
                   </button>
                 </div>
               </div>
 
-              <div style={{ height: 1, background: 'rgba(0,0,0,.08)', margin: '6px 0' }} />
-              <MenuItem
-                label="🗑️ delete"
-                onClick={() => {
-                  if (selectedIds.size > 0) removeNodes(Array.from(selectedIds));
-                  else if (selectedEdgeIds.size > 0) removeEdges(Array.from(selectedEdgeIds));
-                  setContextMenu({ ...contextMenu, open: false });
+              <div
+                style={{
+                  height: 1,
+                  background: "rgba(15,23,42,.08)",
+                  margin: "6px 0",
                 }}
-                disabled={selectedIds.size === 0 && selectedEdgeIds.size === 0}
+              />
+              <MenuItem
+                label="🗑️ Delete"
+                onClick={() => {
+                  if (selectedIds.size > 0)
+                    removeNodes(Array.from(selectedIds));
+                  else if (selectedEdgeIds.size > 0)
+                    removeEdges(Array.from(selectedEdgeIds));
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
+                }}
+                disabled={
+                  selectedIds.size === 0 &&
+                  selectedEdgeIds.size === 0
+                }
               />
             </>
           )}
 
           {/* Knoten */}
-          {contextMenu.kind === 'node' && (
+          {contextMenu.kind === "node" && (
             <>
-              <MenuItem label="✏️ Rename" onClick={() => { if (contextMenu.targetNodeId!=null) { setEditingId(contextMenu.targetNodeId); setEditingText(nodes.find(n=>n.id===contextMenu.targetNodeId)?.label || ""); } setContextMenu({ ...contextMenu, open:false }); }} />
-              <MenuItem label="➕ Children" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = addChild(contextMenu.targetNodeId); selectOnly(id); } setContextMenu({ ...contextMenu, open:false }); }} />
-              <MenuItem label="➕ Partner" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = addSiblingOf(contextMenu.targetNodeId); selectOnly(id); } setContextMenu({ ...contextMenu, open:false }); }} />
-              <MenuItem label="⭐ Highlight" onClick={() => { if (contextMenu.targetNodeId!=null) { const id = contextMenu.targetNodeId; pushHistory(); setNodes(prev => prev.map(n => n.id === id ? { ...n, bold: !n.bold } : n)); } setContextMenu({ ...contextMenu, open:false }); }} />
-              <div style={{ height:1, background:'rgba(0,0,0,.08)', margin:'6px 0' }} />
+              <MenuItem
+                label="✏️ Rename"
+                onClick={() => {
+                  if (contextMenu.targetNodeId != null) {
+                    setEditingId(contextMenu.targetNodeId);
+                    setEditingText(
+                      nodes.find(
+                        (n) =>
+                          n.id === contextMenu.targetNodeId
+                      )?.label || ""
+                    );
+                  }
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
+                }}
+              />
+              <MenuItem
+                label="➕ Child"
+                onClick={() => {
+                  if (contextMenu.targetNodeId != null) {
+                    const id = addChild(contextMenu.targetNodeId);
+                    selectOnly(id);
+                  }
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
+                }}
+              />
+              <MenuItem
+                label="➕ Sibling"
+                onClick={() => {
+                  if (contextMenu.targetNodeId != null) {
+                    const id = addSiblingOf(
+                      contextMenu.targetNodeId
+                    );
+                    selectOnly(id);
+                  }
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
+                }}
+              />
+              <MenuItem
+                label="⭐ Highlight"
+                onClick={() => {
+                  if (contextMenu.targetNodeId != null) {
+                    const id = contextMenu.targetNodeId;
+                    pushHistory();
+                    setNodes((prev) =>
+                      prev.map((n) =>
+                        n.id === id
+                          ? { ...n, bold: !n.bold }
+                          : n
+                      )
+                    );
+                  }
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
+                }}
+              />
+              <div
+                style={{
+                  height: 1,
+                  background: "rgba(15,23,42,.08)",
+                  margin: "6px 0",
+                }}
+              />
 
-              <div style={{ padding:'6px 10px' }}>
-                <div style={{ fontSize:12, opacity:.7, marginBottom:6 }}>Colour</div>
-                <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+              <div style={{ padding: "6px 10px" }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    opacity: 0.7,
+                    marginBottom: 6,
+                  }}
+                >
+                  Color
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
                   {[
-                    { name: "Neon Grün",  color: "#39FF14" },
-                    { name: "Neon Gelb",  color: "#FFFF33" },
-                    { name: "Neon Rot",   color: "#FF073A" },
-                    { name: "Schwarz",    color: "#000000" },
-                  ].map(p => (
+                    { name: "Blue", color: "#90caf9" },
+                    { name: "Green", color: "#a5d6a7" },
+                    { name: "Yellow", color: "#ffe082" },
+                    { name: "Red", color: "#ef9a9a" },
+                  ].map((p) => (
                     <button
                       key={p.color}
                       title={p.name}
                       onClick={() => {
-                        if (contextMenu.targetNodeId!=null) {
-                          const rgba = hexToRgba60(p.color);
-                          pushHistory();
-                          setNodes(prev => prev.map(n => n.id === contextMenu.targetNodeId ? { ...n, fillColor: rgba } : n));
-                        }
-                        setContextMenu({ ...contextMenu, open:false });
+                        const ids =
+                          selectedIds.size > 0
+                            ? Array.from(selectedIds)
+                            : contextMenu.targetNodeId != null
+                            ? [contextMenu.targetNodeId]
+                            : [];
+
+                        if (!ids.length) return;
+
+                        const rgba = hexToRgba60(p.color);
+                        pushHistory();
+                        setNodes((prev) =>
+                          prev.map((n) =>
+                            ids.includes(n.id)
+                              ? { ...n, fillColor: rgba }
+                              : n
+                          )
+                        );
+                        setContextMenu({
+                          ...contextMenu,
+                          open: false,
+                        });
                       }}
-                      style={{ width:24, height:24, borderRadius:6, border:'1px solid #555', background:'#fff', padding:0, cursor:'pointer', boxShadow:'0 1px 4px rgba(0,0,0,.15)' }}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        border: "none",
+                        background: "transparent",
+                        padding: 0,
+                        cursor: "pointer",
+                      }}
                     >
-                      <span style={{ display:'block', width:18, height:18, borderRadius:5, background:p.color, margin:'3px' }} />
+                      <span
+                        style={{
+                          display: "block",
+                          width: 24,
+                          height: 24,
+                          borderRadius: 8,
+                          background: p.color,
+                        }}
+                      />
                     </button>
                   ))}
+
                   <button
                     onClick={() => {
-                      if (contextMenu.targetNodeId!=null) {
-                        pushHistory();
-                        setNodes(prev => prev.map(n => n.id === contextMenu.targetNodeId ? { ...n, fillColor: undefined } : n));
-                      }
-                      setContextMenu({ ...contextMenu, open:false });
+                      const ids =
+                        selectedIds.size > 0
+                          ? Array.from(selectedIds)
+                          : contextMenu.targetNodeId != null
+                          ? [contextMenu.targetNodeId]
+                          : [];
+
+                      if (!ids.length) return;
+
+                      pushHistory();
+                      setNodes((prev) =>
+                        prev.map((n) =>
+                          ids.includes(n.id)
+                            ? { ...n, fillColor: undefined }
+                            : n
+                        )
+                      );
+                      setContextMenu({
+                        ...contextMenu,
+                        open: false,
+                      });
                     }}
-                    style={{ background:'#eee', color:'#333', border:'none', padding:'6px 10px', borderRadius:10 }}
-                  >No Colour</button>
+                    style={{
+                      background: "#e5e7eb",
+                      color: "#111827",
+                      border: "none",
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                  >
+                    No Color
+                  </button>
                 </div>
               </div>
 
-              <div style={{ height:1, background:'rgba(0,0,0,.08)', margin:'6px 0' }} />
-              <MenuItem label="🗑️ Delete" onClick={() => { if (contextMenu.targetNodeId!=null) removeNodes([contextMenu.targetNodeId]); setContextMenu({ ...contextMenu, open:false }); }} />
+              <div
+                style={{
+                  height: 1,
+                  background: "rgba(15,23,42,.08)",
+                  margin: "6px 0",
+                }}
+              />
+              <MenuItem
+                label="🗑️ Delete"
+                onClick={() => {
+                  if (contextMenu.targetNodeId != null)
+                    removeNodes([contextMenu.targetNodeId]);
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
+                }}
+              />
             </>
           )}
 
           {/* Kante */}
-          {contextMenu.kind === 'edge' && (
+          {contextMenu.kind === "edge" && (
             <>
               <MenuItem
-                label="stitched"
+                label="╌╌╌ Toggle dashed"
                 onClick={() => {
-                  if (contextMenu.targetEdgeId!=null) {
+                  if (contextMenu.targetEdgeId != null) {
                     const id = contextMenu.targetEdgeId;
                     pushHistory();
-                    setEdges(prev => prev.map(ed => ed.id === id ? { ...ed, dashed: !ed.dashed } : ed));
+                    setEdges((prev) =>
+                      prev.map((ed) =>
+                        ed.id === id
+                          ? { ...ed, dashed: !ed.dashed }
+                          : ed
+                      )
+                    );
                   }
-                  setContextMenu({ ...contextMenu, open:false });
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
                 }}
               />
               <MenuItem
-                label="✏️ Label bearbeiten"
+                label="✏️ Rename edge"
                 onClick={() => {
-                  if (contextMenu.targetEdgeId!=null) {
-                    const ed = edges.find(x => x.id === contextMenu.targetEdgeId);
+                  if (contextMenu.targetEdgeId != null) {
+                    const ed = edges.find(
+                      (x) =>
+                        x.id === contextMenu.targetEdgeId
+                    );
                     const cur = ed?.label ?? "";
-                    const next = window.prompt('Label für Kante:', cur);
+                    const next = window.prompt(
+                      "Label for edge:",
+                      cur
+                    );
                     if (next !== null) {
                       pushHistory();
                       const id = contextMenu.targetEdgeId;
-                      setEdges(prev => prev.map(e => e.id === id ? { ...e, label: next || undefined } : e));
+                      setEdges((prev) =>
+                        prev.map((e) =>
+                          e.id === id
+                            ? {
+                                ...e,
+                                label:
+                                  next.trim() || undefined,
+                              }
+                            : e
+                        )
+                      );
                     }
                   }
-                  setContextMenu({ ...contextMenu, open:false });
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
                 }}
               />
-              <div style={{ height:1, background:'rgba(0,0,0,.08)', margin:'6px 0' }} />
-              <MenuItem label="🗑️ Kante löschen" onClick={() => { if (contextMenu.targetEdgeId!=null) removeEdges([contextMenu.targetEdgeId]); setContextMenu({ ...contextMenu, open:false }); }} />
+              <div
+                style={{
+                  height: 1,
+                  background: "rgba(15,23,42,.08)",
+                  margin: "6px 0",
+                }}
+              />
+              <MenuItem
+                label="🗑️ Delete edge"
+                onClick={() => {
+                  if (contextMenu.targetEdgeId != null)
+                    removeEdges([contextMenu.targetEdgeId]);
+                  setContextMenu({
+                    ...contextMenu,
+                    open: false,
+                  });
+                }}
+              />
             </>
           )}
         </div>
@@ -1486,17 +2393,38 @@ export default function App() {
 }
 
 /** --- MenuItem-Helper --- */
-function MenuItem({ label, onClick, disabled }: { label: string; onClick?: () => void; disabled?: boolean }) {
+function MenuItem({
+  label,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       style={{
-        width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'transparent',
-        cursor: disabled ? 'not-allowed' : 'pointer', borderRadius: 8, color: disabled ? '#999' : '#222'
+        width: "100%",
+        textAlign: "left",
+        padding: "8px 12px",
+        border: "none",
+        background: "transparent",
+        cursor: disabled ? "not-allowed" : "pointer",
+        borderRadius: 8,
+        color: disabled ? "#9ca3af" : "#0f172a",
+        fontSize: 13,
       }}
-      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(25,118,210,.08)'; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background =
+          "rgba(37,99,235,.08)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLButtonElement).style.background =
+          "transparent";
+      }}
     >
       {label}
     </button>
